@@ -1,6 +1,9 @@
 const path = require("path");
 const fs = require("fs");
-
+const {
+  getStorageDir,
+  toPublicPath,
+} = require("../services/storage_service");
 const { getDatabase } = require("../database/db");
 
 function getPublicFileUrl(filePath) {
@@ -25,9 +28,7 @@ async function moveFileToOrganizedFolder({
   const safeWorkOrder = safeFolderName(workOrderNumber);
   const safeStage = safeFolderName(stage);
 
-  const targetDir = path.join(
-    __dirname,
-    "..",
+  const targetDir = getStorageDir(
     "uploads",
     "work-orders",
     safeTechnician,
@@ -35,18 +36,43 @@ async function moveFileToOrganizedFolder({
     safeStage
   );
 
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
-
   const oldPath = file.path;
   const newPath = path.join(targetDir, file.filename);
 
-  fs.renameSync(oldPath, newPath);
+  console.log("Moving uploaded file:", {
+    oldPath,
+    newPath,
+    oldExists: fs.existsSync(oldPath),
+    targetDirExists: fs.existsSync(targetDir),
+  });
 
-  return path.relative(path.join(__dirname, ".."), newPath);
+  try {
+    fs.renameSync(oldPath, newPath);
+  } catch (error) {
+    console.log("Rename failed, using copy fallback:", error.message);
+
+    fs.copyFileSync(oldPath, newPath);
+
+    if (fs.existsSync(oldPath)) {
+      fs.unlinkSync(oldPath);
+    }
+  }
+
+  const relativeFilePath = toPublicPath(
+    path.join(
+      "uploads",
+      "work-orders",
+      safeTechnician,
+      safeWorkOrder,
+      safeStage,
+      file.filename
+    )
+  );
+
+  console.log("Saved relative file path:", relativeFilePath);
+
+  return relativeFilePath;
 }
-
 async function uploadWorkOrder(req, res) {
   const db = getDatabase();
 

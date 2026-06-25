@@ -1,5 +1,9 @@
 
 const { createActivityLog } = require("../services/log_service");
+const {
+  getStoredFileAbsolutePath,
+  getStorageDir,
+} = require("../services/storage_service");
 
 const {
   getPptSettings,
@@ -354,7 +358,7 @@ async function deleteWorkOrderPhoto(req, res) {
     return res.redirect(`/admin/work-orders/${workOrderId}`);
   }
 
-  const absolutePath = path.join(__dirname, "..", photo.file_path);
+  const absolutePath = getStoredFileAbsolutePath(photo.file_path)
 
   if (fs.existsSync(absolutePath)) {
     fs.unlinkSync(absolutePath);
@@ -595,7 +599,7 @@ async function downloadPpt(req, res) {
     return res.status(404).send("PPT not found");
   }
 
-  const absolutePath = path.join(__dirname, "..", workOrder.ppt_file_path);
+  const absolutePath = getStoredFileAbsolutePath(workOrder.ppt_file_path)
 
   if (!fs.existsSync(absolutePath)) {
     return res.status(404).send("PPT file missing from server");
@@ -823,7 +827,7 @@ async function deleteWorkOrder(req, res) {
 
     for (const photo of photos) {
       if (photo.file_path) {
-        const absolutePhotoPath = path.join(__dirname, "..", photo.file_path);
+        const absolutePhotoPath = getStoredFileAbsolutePath(photo.file_path)
 
         if (fs.existsSync(absolutePhotoPath)) {
           fs.unlinkSync(absolutePhotoPath);
@@ -832,20 +836,14 @@ async function deleteWorkOrder(req, res) {
     }
 
     if (workOrder.ppt_file_path) {
-      const absolutePptPath = path.join(__dirname, "..", workOrder.ppt_file_path);
+      const absolutePptPath = getStoredFileAbsolutePath(workOrder.ppt_file_path)
 
       if (fs.existsSync(absolutePptPath)) {
         fs.unlinkSync(absolutePptPath);
       }
     }
 
-    const reportFolder = path.join(
-      __dirname,
-      "..",
-      "uploads",
-      "reports",
-      String(id)
-    );
+    const reportFolder = getStorageDir("uploads", "reports", String(id));
 
     if (fs.existsSync(reportFolder)) {
       fs.rmSync(reportFolder, {
@@ -921,7 +919,7 @@ async function deleteTechnician(req, res) {
 
       for (const photo of photos) {
         if (photo.file_path) {
-          const absolutePhotoPath = path.join(__dirname, "..", photo.file_path);
+          const absolutePhotoPath = getStoredFileAbsolutePath(photo.file_path)
 
           if (fs.existsSync(absolutePhotoPath)) {
             fs.unlinkSync(absolutePhotoPath);
@@ -941,13 +939,7 @@ async function deleteTechnician(req, res) {
         }
       }
 
-      const reportFolder = path.join(
-        __dirname,
-        "..",
-        "uploads",
-        "reports",
-        String(workOrder.id)
-      );
+      const reportFolder = getStorageDir("uploads", "reports", String(workOrder.id));
 
       if (fs.existsSync(reportFolder)) {
         fs.rmSync(reportFolder, {

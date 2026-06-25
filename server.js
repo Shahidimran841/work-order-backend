@@ -1,5 +1,7 @@
 const session = require("express-session");
 const adminRoutes = require("./routes/admin_routes");
+
+const { getStorageDir } = require("./services/storage_service");
 require("dotenv").config();
 
 const fs = require("fs");
@@ -34,14 +36,14 @@ app.use(
     saveUninitialized: false,
   })
 );
-app.use("/uploads", express.static(uploadsPath));
+app.use("/uploads", express.static(getStorageDir("uploads")));
 
 app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "Work Order Backend API is running",
   });
-});
+});app.listen
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -50,7 +52,10 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
-
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 app.use("/admin", adminRoutes);

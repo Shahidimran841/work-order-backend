@@ -2,12 +2,14 @@ const bcrypt = require("bcryptjs");
 const path = require("path");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
+const { getStoragePath } = require("../services/storage_service");
 
 let db;
 
 async function initDatabase() {
+  // Step 2 updated: Swapped path.join for getStoragePath
   db = await open({
-    filename: path.join(__dirname, "work_order_app.sqlite"),
+    filename: getStoragePath("database", "work_order_app.sqlite"),
     driver: sqlite3.Database,
   });
 

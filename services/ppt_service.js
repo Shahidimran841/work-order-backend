@@ -1,7 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
-
+const {
+  getStorageDir,
+  getStoredFileAbsolutePath,
+  toPublicPath,
+} = require("./storage_service");
 const { getDatabase } = require("../database/db");
 const { getPptSettings } = require("./app_settings_service");
 
@@ -16,23 +20,10 @@ const imageSize =
   imageSizePackage;
 
 function getAbsolutePath(relativePath) {
-  return path.join(__dirname, "..", relativePath);
+  return getStoredFileAbsolutePath(relativePath);
 }
-
 function ensureReportsFolder(workOrderId) {
-  const reportsDir = path.join(
-    __dirname,
-    "..",
-    "uploads",
-    "reports",
-    String(workOrderId)
-  );
-
-  if (!fs.existsSync(reportsDir)) {
-    fs.mkdirSync(reportsDir, { recursive: true });
-  }
-
-  return reportsDir;
+  return getStorageDir("uploads", "reports", String(workOrderId));
 }
 
 function getTemplatePath() {
@@ -438,10 +429,9 @@ slideGroups.forEach((group, groupIndex) => {
 
   const fileName = `${safeWorkOrder}_${Date.now()}.pptx`;
   const absolutePptPath = path.join(reportsDir, fileName);
-  const relativePptPath = path.relative(
-    path.join(__dirname, ".."),
-    absolutePptPath
-  );
+  const relativePptPath = toPublicPath(
+  path.join("uploads", "reports", String(workOrderId), fileName)
+);
 
   await pptx.writeFile({
     fileName: absolutePptPath,

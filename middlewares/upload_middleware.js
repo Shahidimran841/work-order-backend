@@ -1,12 +1,10 @@
-const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const { getStorageDir } = require("../services/storage_service");
 
-const uploadDir = path.join(__dirname, "..", "uploads", "work-orders");
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Temporary folder for incoming uploads.
+// Controller will move files from here to organized work-order folders.
+const uploadDir = getStorageDir("uploads", "work-orders");
 
 function isAllowedImage(file) {
   const allowedMimeTypes = [
@@ -14,14 +12,17 @@ function isAllowedImage(file) {
     "image/jpg",
     "image/png",
     "image/webp",
-    "application/octet-stream"
+    "application/octet-stream",
   ];
 
   const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
 
   const ext = path.extname(file.originalname || "").toLowerCase();
 
-  return allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(ext);
+  return (
+    allowedMimeTypes.includes(file.mimetype) ||
+    allowedExtensions.includes(ext)
+  );
 }
 
 const storage = multer.diskStorage({
