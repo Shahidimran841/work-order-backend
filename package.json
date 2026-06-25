@@ -1,0 +1,32 @@
+{
+  "name": "work_order_backend",
+  "version": "1.0.0",
+  "description": "Work Order App Backend with Node.js, Express and SQLite",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "ejs": "^6.0.1",
+    "express": "^5.1.0",
+    "express-session": "^1.19.0",
+    "image-size": "^2.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^9.0.1",
+    "pptxgenjs": "^4.0.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
