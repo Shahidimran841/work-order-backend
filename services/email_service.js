@@ -1,11 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
+const {
+  getStoredFileAbsolutePath,
+} = require("./storage_service");
 
 const { getDatabase } = require("../database/db");
 
 function getAbsolutePath(relativePath) {
-  return path.join(__dirname, "..", relativePath);
+  return getStoredFileAbsolutePath(relativePath);
 }
 
 function isEmailEnabled() {
@@ -55,15 +58,21 @@ async function sendPptReportEmail(workOrderId) {
     throw new Error("Work order not found");
   }
 
-  if (!workOrder.ppt_file_path) {
-    throw new Error("PPT is not generated yet");
-  }
+if (!workOrder.ppt_file_path) {
+  throw new Error("PPT is not generated yet");
+}
 
-  const absolutePptPath = getAbsolutePath(workOrder.ppt_file_path);
+const absolutePptPath = getStoredFileAbsolutePath(workOrder.ppt_file_path);
 
-  if (!fs.existsSync(absolutePptPath)) {
-    throw new Error("PPT file is missing from server");
-  }
+console.log("Email PPT file check:", {
+  relativePath: workOrder.ppt_file_path,
+  absolutePptPath,
+  exists: fs.existsSync(absolutePptPath),
+});
+
+if (!fs.existsSync(absolutePptPath)) {
+  throw new Error("PPT file is missing from server");
+}
 
   const recipients = await getActiveRecipients();
 
