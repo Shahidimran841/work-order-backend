@@ -17,7 +17,17 @@ function safeFolderName(value) {
     .replace(/\s+/g, "_")
     .replace(/[\\/:*?"<>|]/g, "_");
 }
-
+function cleanupUploadedTempFiles(files) {
+  for (const file of files || []) {
+    try {
+      if (file.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    } catch (error) {
+      console.log("Temp file cleanup failed:", error.message);
+    }
+  }
+}
 async function moveFileToOrganizedFolder({
   file,
   technicianId,
@@ -101,6 +111,29 @@ async function uploadWorkOrder(req, res) {
     const technicianId = req.user ? req.user.id : null;
     const files = req.files || [];
     const parsedMetadata = metadata ? JSON.parse(metadata) : {};
+    if (localId) {
+  const existingWorkOrder = await db.get(
+    `
+    SELECT id
+    FROM work_orders
+    WHERE technician_id = ?
+      AND local_id = ?
+    `,
+    [technicianId, localId]
+  );
+
+  if (existingWorkOrder) {
+    cleanupUploadedTempFiles(files);
+
+    return res.status(200).json({
+      success: true,
+      message: "Work order already uploaded. Duplicate upload ignored.",
+      serverWorkOrderId: existingWorkOrder.id,
+      duplicate: true,
+      pptStatus: "not_generated",
+    });
+  }
+}
 
     await db.run("BEGIN TRANSACTION");
 
@@ -188,10 +221,39 @@ async function uploadWorkOrder(req, res) {
       photoCount: files.length,
       pptStatus: "not_generated",
     });
-  } catch (error) {
-    await db.run("ROLLBACK");
+    } catch (error) {
+    await db.run("ROLLBACK").catch(() => {});
+
+    cleanupUploadedTempFiles(req.files || []);
 
     console.error("Upload work order error:", error);
+
+    if (
+      error.message &&
+      error.message.toLowerCase().includes("unique")
+    ) {
+      const db = getDatabase();
+
+      const existingWorkOrder = await db.get(
+        `
+        SELECT id
+        FROM work_orders
+        WHERE technician_id = ?
+          AND local_id = ?
+        `,
+        [req.user?.id || null, req.body.localId || ""]
+      );
+
+      if (existingWorkOrder) {
+        return res.status(200).json({
+          success: true,
+          message: "Work order already uploaded. Duplicate upload ignored.",
+          serverWorkOrderId: existingWorkOrder.id,
+          duplicate: true,
+          pptStatus: "not_generated",
+        });
+      }
+    }
 
     return res.status(500).json({
       success: false,

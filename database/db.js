@@ -90,6 +90,11 @@ async function initDatabase() {
       updated_at TEXT
     );
   `);
+  await db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_work_order_local_upload
+    ON work_orders (technician_id, local_id)
+    WHERE local_id IS NOT NULL AND local_id != '';
+  `);
   await ensureColumn("email_recipients", "name", "TEXT");
   await ensureColumn("work_orders", "ppt_file_path", "TEXT");
   await ensureColumn("work_orders", "ppt_status", "TEXT DEFAULT 'not_generated'");

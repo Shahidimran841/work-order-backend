@@ -5,17 +5,12 @@ function normalizePhone(phone) {
 function toE164Phone(phone) {
   const value = normalizePhone(phone);
 
-  // Pakistan local format: 03XXXXXXXXX -> +923XXXXXXXXX
-  if (/^03\d{9}$/.test(value)) {
-    return `+92${value.substring(1)}`;
+  // Qatar local 8 digit number -> +974XXXXXXXX
+  if (/^\d{8}$/.test(value)) {
+    return `+974${value}`;
   }
 
-  // Already international Pakistan format
-  if (/^\+923\d{9}$/.test(value)) {
-    return value;
-  }
-
-  // Qatar format
+  // Already Qatar international format
   if (/^\+974\d{8}$/.test(value)) {
     return value;
   }
@@ -26,19 +21,17 @@ function toE164Phone(phone) {
 function isValidPhone(phone) {
   const value = normalizePhone(phone);
 
-  const country = process.env.ALLOWED_PHONE_COUNTRY || "PK";
+  const country = process.env.ALLOWED_PHONE_COUNTRY || "QA";
+
+  if (country === "QA") {
+    // Client requirement: Qatar phone number = 8 digits only
+    return /^\d{8}$/.test(value);
+  }
 
   if (country === "PK") {
-    // Allows 03XXXXXXXXX and +923XXXXXXXXX
     return /^(03\d{9}|\+923\d{9})$/.test(value);
   }
 
-  if (country === "QA") {
-    // Allows +974XXXXXXXX
-    return /^\+974\d{8}$/.test(value);
-  }
-
-  // Generic international format
   return /^\+\d{10,15}$/.test(value);
 }
 

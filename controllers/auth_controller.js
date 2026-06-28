@@ -40,7 +40,7 @@ async function register(req, res) {
       return res.status(400).json({
         success: false,
         message:
-          "Invalid phone number. Use valid format like 03XXXXXXXXX or +923XXXXXXXXX.",
+          "Invalid phone number. Please enter a valid 8-digit Qatar phone number.",
       });
     }
 
@@ -131,7 +131,7 @@ async function login(req, res) {
     if (!isValidPhone(phone) && phone !== "admin") {
       return res.status(400).json({
         success: false,
-        message: "Invalid phone number format",
+        message: "Invalid phone number. Please enter a valid 8-digit Qatar phone number.",
       });
     }
 
