@@ -34,7 +34,6 @@ function isValidPhone(phone) {
 
   return /^\+\d{10,15}$/.test(value);
 }
-
 function validatePassword(password) {
   const value = String(password || "");
 
