@@ -90,11 +90,58 @@ async function initDatabase() {
       updated_at TEXT
     );
   `);
+ try {
+  // Clean old duplicate work orders before creating unique index.
+  // Keep the first uploaded record and remove later duplicates.
   await db.exec(`
+    DELETE FROM work_order_photos
+    WHERE work_order_id IN (
+      SELECT id
+      FROM work_orders
+      WHERE local_id IS NOT NULL
+        AND local_id != ''
+        AND id NOT IN (
+          SELECT MIN(id)
+          FROM work_orders
+          WHERE local_id IS NOT NULL
+            AND local_id != ''
+          GROUP BY technician_id, local_id
+        )
+    );
+
+    DELETE FROM ppt_reports
+    WHERE work_order_id IN (
+      SELECT id
+      FROM work_orders
+      WHERE local_id IS NOT NULL
+        AND local_id != ''
+        AND id NOT IN (
+          SELECT MIN(id)
+          FROM work_orders
+          WHERE local_id IS NOT NULL
+            AND local_id != ''
+          GROUP BY technician_id, local_id
+        )
+    );
+
+    DELETE FROM work_orders
+    WHERE local_id IS NOT NULL
+      AND local_id != ''
+      AND id NOT IN (
+        SELECT MIN(id)
+        FROM work_orders
+        WHERE local_id IS NOT NULL
+          AND local_id != ''
+        GROUP BY technician_id, local_id
+      );
+
     CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_work_order_local_upload
     ON work_orders (technician_id, local_id)
     WHERE local_id IS NOT NULL AND local_id != '';
   `);
+} catch (error) {
+  console.log("Duplicate work order cleanup/index setup skipped:", error.message);
+}
   await ensureColumn("email_recipients", "name", "TEXT");
   await ensureColumn("work_orders", "ppt_file_path", "TEXT");
   await ensureColumn("work_orders", "ppt_status", "TEXT DEFAULT 'not_generated'");
