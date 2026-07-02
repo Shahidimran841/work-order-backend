@@ -431,9 +431,31 @@ async function addMorePhotos(req, res) {
   }
 
   await db.run(
-    "UPDATE work_orders SET ppt_status = 'needs_regeneration' WHERE id = ?",
-    workOrderId
-  );
+  `
+  UPDATE work_orders
+  SET ppt_status = ?,
+      ppt_file_path = ?,
+      email_status = ?,
+      email_sent_at = ?,
+      email_error = ?,
+      is_edited = ?,
+      edited_at = ?,
+      edit_count = COALESCE(edit_count, 0) + 1,
+      last_added_photo_count = ?
+  WHERE id = ?
+  `,
+  [
+    "needs_regeneration",
+    "",
+    "not_sent",
+    null,
+    "",
+    1,
+    new Date().toISOString(),
+    files.length,
+    workOrderId,
+  ]
+);
   await createActivityLog({
     userId: req.session.adminUser.id,
     action: "PHOTOS_ADDED",

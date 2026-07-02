@@ -383,31 +383,40 @@ async function addPhotosToExistingWorkOrder(req, res) {
       );
     }
 
-    await db.run(
-      `
-      UPDATE work_orders
-      SET notes = ?,
-          submitted_at = ?,
-          metadata_json = ?,
-          ppt_status = ?,
-          ppt_file_path = ?,
-          email_status = ?,
-          email_sent_at = ?,
-          email_error = ?
-      WHERE id = ?
-      `,
-      [
-        notes || workOrder.notes || "",
-        submittedAt || new Date().toISOString(),
-        JSON.stringify(parsedMetadata),
-        "not_generated",
-        "",
-        "Not Sent",
-        null,
-        "",
-        workOrder.id,
-      ]
-    );
+    const editedAt = new Date().toISOString();
+
+await db.run(
+  `
+  UPDATE work_orders
+  SET notes = ?,
+      submitted_at = ?,
+      metadata_json = ?,
+      ppt_status = ?,
+      ppt_file_path = ?,
+      email_status = ?,
+      email_sent_at = ?,
+      email_error = ?,
+      is_edited = ?,
+      edited_at = ?,
+      edit_count = COALESCE(edit_count, 0) + 1,
+      last_added_photo_count = ?
+  WHERE id = ?
+  `,
+  [
+    notes || workOrder.notes || "",
+    submittedAt || editedAt,
+    JSON.stringify(parsedMetadata),
+    "needs_regeneration",
+    "",
+    "not_sent",
+    null,
+    "",
+    1,
+    editedAt,
+    files.length,
+    workOrder.id,
+  ]
+);
 
     await db.run(
       `
@@ -431,13 +440,15 @@ async function addPhotosToExistingWorkOrder(req, res) {
     );
 
     return res.status(200).json({
-      success: true,
-      message: "Photos added to existing work order successfully",
-      serverWorkOrderId: workOrder.id,
-      addedPhotoCount: files.length,
-      totalPhotoCount: totalPhotos ? totalPhotos.count : files.length,
-      pptStatus: "not_generated",
-    });
+  success: true,
+  message: "Photos added to existing work order successfully",
+  serverWorkOrderId: workOrder.id,
+  addedPhotoCount: files.length,
+  totalPhotoCount: totalPhotos ? totalPhotos.count : files.length,
+  pptStatus: "needs_regeneration",
+  isEdited: true,
+  editedAt,
+});
   } catch (error) {
     await db.run("ROLLBACK").catch(() => {});
 

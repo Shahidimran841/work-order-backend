@@ -88,6 +88,7 @@
                   <th>Technician</th>
                   <th>Photos</th>
                   <th>Status</th>
+                  <th>Edited</th>
                   <th>PPT</th>
                   <th>Email</th>
                   <th>Received</th>
@@ -106,43 +107,62 @@
                     </td>
                     <td><%= order.photo_count %></td>
                     <td><span class="badge bg-primary"><%= order.status %></span></td>
+
+                    <td>
+                      <% if (order.is_edited == 1) { %>
+                        <span class="badge bg-warning text-dark">Edited</span>
+                        <br />
+                        <small class="text-muted">
+                          <%= order.edit_count || 1 %> time(s)
+                        </small>
+                      <% } else { %>
+                        <span class="badge bg-light text-dark border">Original</span>
+                      <% } %>
+                    </td>
+
                     <td>
                       <% if (order.ppt_status === 'needs_regeneration') { %>
-                        <span class="badge bg-warning text-dark">needs regeneration</span>
+                        <span class="badge bg-warning text-dark">Needs Regeneration</span>
+                      <% } else if (order.ppt_status === 'generated') { %>
+                        <span class="badge bg-success">Generated</span>
+                      <% } else if (order.ppt_status === 'failed') { %>
+                        <span class="badge bg-danger">Failed</span>
                       <% } else { %>
                         <span class="badge bg-secondary"><%= order.ppt_status || 'not_generated' %></span>
                       <% } %>
-                      <td>
-  <% if (order.email_status === 'sent') { %>
-    <span class="badge bg-success">Sent</span>
-  <% } else if (order.email_status === 'test_mode') { %>
-    <span class="badge bg-info text-dark">Test Mode</span>
-  <% } else if (order.email_status === 'failed') { %>
-    <span class="badge bg-danger">Failed</span>
-  <% } else if (order.email_status === 'sending') { %>
-    <span class="badge bg-primary">Sending</span>
-  <% } else { %>
-    <span class="badge bg-secondary">Not Sent</span>
-  <% } %>
-</td>
                     </td>
+
+                    <td>
+                      <% if (order.email_status === 'sent') { %>
+                        <span class="badge bg-success">Sent</span>
+                      <% } else if (order.email_status === 'test_mode') { %>
+                        <span class="badge bg-info text-dark">Test Mode</span>
+                      <% } else if (order.email_status === 'failed') { %>
+                        <span class="badge bg-danger">Failed</span>
+                      <% } else if (order.email_status === 'sending') { %>
+                        <span class="badge bg-primary">Sending</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary">Not Sent</span>
+                      <% } %>
+                    </td>
+
                     <td><small><%= order.received_at || '-' %></small></td>
                     <td>
                       <div class="d-flex gap-2">
-  <a class="btn btn-sm btn-primary" href="/admin/work-orders/<%= order.id %>">
-    Review
-  </a>
+                        <a class="btn btn-sm btn-primary" href="/admin/work-orders/<%= order.id %>">
+                          Review
+                        </a>
 
-  <form
-    method="POST"
-    action="/admin/work-orders/<%= order.id %>/delete"
-    onsubmit="return confirm('Are you sure you want to delete this work order? This will also delete its photos and generated PPT.');"
-  >
-    <button class="btn btn-sm btn-outline-danger" type="submit">
-      Delete
-    </button>
-  </form>
-</div>
+                        <form
+                          method="POST"
+                          action="/admin/work-orders/<%= order.id %>/delete"
+                          onsubmit="return confirm('Are you sure you want to delete this work order? This will also delete its photos and generated PPT.');"
+                        >
+                          <button class="btn btn-sm btn-outline-danger" type="submit">
+                            Delete
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 <% }) %>

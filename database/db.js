@@ -1,5 +1,4 @@
 const bcrypt = require("bcryptjs");
-const path = require("path");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
 const { getStoragePath } = require("../services/storage_service");
@@ -7,7 +6,6 @@ const { getStoragePath } = require("../services/storage_service");
 let db;
 
 async function initDatabase() {
-  // Step 2 updated: Swapped path.join for getStoragePath
   db = await open({
     filename: getStoragePath("database", "work_order_app.sqlite"),
     driver: sqlite3.Database,
@@ -39,6 +37,13 @@ async function initDatabase() {
       metadata_json TEXT,
       ppt_status TEXT DEFAULT 'not_generated',
       ppt_file_path TEXT,
+      email_status TEXT DEFAULT 'not_sent',
+      email_sent_at TEXT,
+      email_error TEXT,
+      is_edited INTEGER DEFAULT 0,
+      edited_at TEXT,
+      edit_count INTEGER DEFAULT 0,
+      last_added_photo_count INTEGER DEFAULT 0,
       FOREIGN KEY (technician_id) REFERENCES users(id)
     );
 
@@ -57,14 +62,15 @@ async function initDatabase() {
       FOREIGN KEY (work_order_id) REFERENCES work_orders(id)
     );
 
-        CREATE TABLE IF NOT EXISTS email_recipients (
+    CREATE TABLE IF NOT EXISTS email_recipients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       email TEXT NOT NULL UNIQUE,
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
-        CREATE TABLE IF NOT EXISTS ppt_reports (
+
+    CREATE TABLE IF NOT EXISTS ppt_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       work_order_id INTEGER NOT NULL,
       ppt_path TEXT,
@@ -83,6 +89,7 @@ async function initDatabase() {
       details TEXT,
       created_at TEXT NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       setting_key TEXT NOT NULL UNIQUE,
@@ -90,67 +97,84 @@ async function initDatabase() {
       updated_at TEXT
     );
   `);
- try {
-  // Clean old duplicate work orders before creating unique index.
-  // Keep the first uploaded record and remove later duplicates.
-  await db.exec(`
-    DELETE FROM work_order_photos
-    WHERE work_order_id IN (
-      SELECT id
-      FROM work_orders
-      WHERE local_id IS NOT NULL
-        AND local_id != ''
-        AND id NOT IN (
-          SELECT MIN(id)
-          FROM work_orders
-          WHERE local_id IS NOT NULL
-            AND local_id != ''
-          GROUP BY technician_id, local_id
-        )
-    );
 
-    DELETE FROM ppt_reports
-    WHERE work_order_id IN (
-      SELECT id
-      FROM work_orders
-      WHERE local_id IS NOT NULL
-        AND local_id != ''
-        AND id NOT IN (
-          SELECT MIN(id)
-          FROM work_orders
-          WHERE local_id IS NOT NULL
-            AND local_id != ''
-          GROUP BY technician_id, local_id
-        )
-    );
-
-    DELETE FROM work_orders
-    WHERE local_id IS NOT NULL
-      AND local_id != ''
-      AND id NOT IN (
-        SELECT MIN(id)
-        FROM work_orders
-        WHERE local_id IS NOT NULL
-          AND local_id != ''
-        GROUP BY technician_id, local_id
-      );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_work_order_local_upload
-    ON work_orders (technician_id, local_id)
-    WHERE local_id IS NOT NULL AND local_id != '';
-  `);
-} catch (error) {
-  console.log("Duplicate work order cleanup/index setup skipped:", error.message);
-}
   await ensureColumn("email_recipients", "name", "TEXT");
+
   await ensureColumn("work_orders", "ppt_file_path", "TEXT");
   await ensureColumn("work_orders", "ppt_status", "TEXT DEFAULT 'not_generated'");
   await ensureColumn("work_orders", "email_status", "TEXT DEFAULT 'not_sent'");
   await ensureColumn("work_orders", "email_sent_at", "TEXT");
   await ensureColumn("work_orders", "email_error", "TEXT");
+
+  await ensureColumn("work_orders", "is_edited", "INTEGER DEFAULT 0");
+  await ensureColumn("work_orders", "edited_at", "TEXT");
+  await ensureColumn("work_orders", "edit_count", "INTEGER DEFAULT 0");
+  await ensureColumn(
+    "work_orders",
+    "last_added_photo_count",
+    "INTEGER DEFAULT 0"
+  );
+
   await ensureColumn("users", "reset_otp_hash", "TEXT");
   await ensureColumn("users", "reset_otp_expires_at", "TEXT");
   await ensureColumn("users", "reset_otp_attempts", "INTEGER DEFAULT 0");
+
+  try {
+    // Clean old duplicate work orders before creating unique index.
+    // Keep the first uploaded record and remove later duplicates.
+    await db.exec(`
+      DELETE FROM work_order_photos
+      WHERE work_order_id IN (
+        SELECT id
+        FROM work_orders
+        WHERE local_id IS NOT NULL
+          AND local_id != ''
+          AND id NOT IN (
+            SELECT MIN(id)
+            FROM work_orders
+            WHERE local_id IS NOT NULL
+              AND local_id != ''
+            GROUP BY technician_id, local_id
+          )
+      );
+
+      DELETE FROM ppt_reports
+      WHERE work_order_id IN (
+        SELECT id
+        FROM work_orders
+        WHERE local_id IS NOT NULL
+          AND local_id != ''
+          AND id NOT IN (
+            SELECT MIN(id)
+            FROM work_orders
+            WHERE local_id IS NOT NULL
+              AND local_id != ''
+            GROUP BY technician_id, local_id
+          )
+      );
+
+      DELETE FROM work_orders
+      WHERE local_id IS NOT NULL
+        AND local_id != ''
+        AND id NOT IN (
+          SELECT MIN(id)
+          FROM work_orders
+          WHERE local_id IS NOT NULL
+            AND local_id != ''
+          GROUP BY technician_id, local_id
+        );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_work_order_local_upload
+      ON work_orders (technician_id, local_id)
+      WHERE local_id IS NOT NULL AND local_id != '';
+    `);
+  } catch (error) {
+    console.log(
+      "Duplicate work order cleanup/index setup skipped:",
+      error.message
+    );
+  }
+
   const adminPhone = process.env.ADMIN_PHONE || "admin";
   const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
 
@@ -190,6 +214,7 @@ async function initDatabase() {
 
     console.log(`Default admin created. Phone: ${adminPhone}`);
   }
+
   console.log("SQLite database initialized");
   return db;
 }
@@ -201,6 +226,7 @@ function getDatabase() {
 
   return db;
 }
+
 async function ensureColumn(tableName, columnName, columnDefinition) {
   const columns = await db.all(`PRAGMA table_info(${tableName})`);
   const exists = columns.some((column) => column.name === columnName);
