@@ -72,14 +72,7 @@ body {
   margin-top: 2px;
 }
 
-.admin-nav-label {
-  color: #64748b;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin: 18px 10px 8px;
-  font-weight: 800;
-}
+
 
 .admin-nav a,
 .admin-nav button {

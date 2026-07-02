@@ -13,23 +13,58 @@
 <body>
   <div class="admin-layout">
     <aside class="admin-sidebar">
+  <div class="admin-logo-wrap">
+    <div class="admin-logo">WO</div>
+    <div>
       <div class="admin-brand">Work Order Admin</div>
-      <div class="admin-brand-subtitle">Manage reports, photos and technicians</div>
+      <div class="admin-brand-subtitle">Operations Portal</div>
+    </div>
+  </div>
 
-      <div class="admin-nav">
-        <a href="/admin">Dashboard</a>
-        <a href="/admin/work-orders">Work Orders</a>
-        <a href="/admin/technicians">Technicians</a>
-        <a class="active" href="/admin/email-recipients">Email Setup</a>
-        <a href="/admin/ppt-settings">PPT Settings</a>
-        <a href="/admin/activity-logs">Activity Logs</a>
-        <a href="/admin/backups">Backups</a>
+  <div class="admin-nav">
+    <a href="/admin">
+      <span class="admin-nav-icon">▣</span>
+      Dashboard
+    </a>
 
-        <form method="POST" action="/admin/logout" class="mt-3">
-          <button type="submit">Logout</button>
-        </form>
-      </div>
-    </aside>
+    <a href="/admin/work-orders">
+      <span class="admin-nav-icon">▤</span>
+      Work Orders
+    </a>
+
+    <a href="/admin/technicians">
+      <span class="admin-nav-icon">◉</span>
+      Technicians
+    </a>
+
+    <a class="active" href="/admin/email-recipients">
+      <span class="admin-nav-icon">✉</span>
+      Email Setup
+    </a>
+
+    <a href="/admin/ppt-settings">
+      <span class="admin-nav-icon">▧</span>
+      PPT Settings
+    </a>
+
+    <a href="/admin/activity-logs">
+      <span class="admin-nav-icon">◎</span>
+      Activity Logs
+    </a>
+
+    <a href="/admin/backups">
+      <span class="admin-nav-icon">⬒</span>
+      Backups
+    </a>
+
+    <form method="POST" action="/admin/logout" class="mt-3">
+      <button type="submit">
+        <span class="admin-nav-icon">↳</span>
+        Logout
+      </button>
+    </form>
+  </div>
+</aside>
 
     <main class="admin-content">
       <div class="mb-4">
