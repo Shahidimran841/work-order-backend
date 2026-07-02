@@ -1,0 +1,178 @@
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1e40af;
+  --bg: #f4f7fb;
+  --sidebar: #0f172a;
+  --sidebar-soft: #1e293b;
+  --text: #111827;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --border: #e5e7eb;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.admin-layout {
+  min-height: 100vh;
+  display: flex;
+}
+
+.admin-sidebar {
+  width: 260px;
+  background: var(--sidebar);
+  color: white;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  padding: 22px 16px;
+}
+
+.admin-brand {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 28px;
+  letter-spacing: -0.5px;
+}
+
+.admin-nav a,
+.admin-nav button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #cbd5e1;
+  text-decoration: none;
+  padding: 11px 14px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.admin-nav a:hover,
+.admin-nav button:hover {
+  background: var(--sidebar-soft);
+  color: white;
+}
+
+.admin-content {
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  padding: 28px;
+}
+
+.page-title {
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+
+.stat-card,
+.admin-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.stat-card {
+  padding: 22px;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 800;
+  margin-top: 6px;
+}
+
+.admin-card .card-header {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  font-weight: 700;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+.table thead th {
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tbody td {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-weight: 600;
+}
+
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.form-control,
+.form-select {
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.help-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  padding: 14px 16px;
+  border-radius: 14px;
+  margin-bottom: 18px;
+}
+
+.photo-card img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 14px;
+  background: #f1f5f9;
+}
+
+@media (max-width: 900px) {
+  .admin-layout {
+    display: block;
+  }
+
+  .admin-sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+  }
+
+  .admin-content {
+    margin-left: 0;
+    width: 100%;
+    padding: 18px;
+  }
+}

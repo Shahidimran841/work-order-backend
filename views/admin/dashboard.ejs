@@ -7,112 +7,166 @@
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     rel="stylesheet"
   />
+  <link rel="stylesheet" href="/public/admin.css" />
 </head>
-<body class="bg-light">
-  <nav class="navbar navbar-expand-lg bg-white border-bottom">
-    <div class="container">
-      <a class="navbar-brand fw-bold" href="/admin">Work Order Admin</a>
-      <div class="d-flex gap-2">
-        <a class="btn btn-outline-success btn-sm" href="/admin/work-orders">Work Orders</a>
-        <a class="btn btn-outline-primary btn-sm" href="/admin/technicians">Technicians</a>
-        <a class="btn btn-outline-dark btn-sm" href="/admin/email-recipients">Email Recipients</a>
-        <a class="btn btn-outline-info btn-sm" href="/admin/activity-logs">Activity Logs</a>
-        <a class="btn btn-outline-warning btn-sm" href="/admin/backups">Backups</a>
-        <a class="btn btn-outline-dark btn-sm" href="/admin/ppt-settings">PPT Settings</a>
-        <form method="POST" action="/admin/logout">
-          <button class="btn btn-outline-danger btn-sm">Logout</button>
+
+<body>
+  <div class="admin-layout">
+    <aside class="admin-sidebar">
+      <div class="admin-brand">Work Order Admin</div>
+      <div class="admin-brand-subtitle">Manage reports, photos and technicians</div>
+
+      <div class="admin-nav">
+        <a class="active" href="/admin">Dashboard</a>
+        <a href="/admin/work-orders">Work Orders</a>
+        <a href="/admin/technicians">Technicians</a>
+        <a href="/admin/email-recipients">Email Setup</a>
+        <a href="/admin/ppt-settings">PPT Settings</a>
+        <a href="/admin/activity-logs">Activity Logs</a>
+        <a href="/admin/backups">Backups</a>
+
+        <form method="POST" action="/admin/logout" class="mt-3">
+          <button type="submit">Logout</button>
         </form>
       </div>
-    </div>
-  </nav>
+    </aside>
 
-  <main class="container py-4">
-    <h4 class="mb-3">Dashboard</h4>
+    <main class="admin-content">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+        <div>
+          <h3 class="page-title">Dashboard</h3>
+          <p class="page-subtitle">Quick overview of technicians, work orders, photos and recent activity.</p>
+        </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <div class="text-muted">Technicians</div>
-            <h3><%= stats.totalTechnicians %></h3>
+        <a href="/admin/work-orders" class="btn btn-primary">
+          View Work Orders
+        </a>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-label">Technicians</div>
+            <div class="stat-value"><%= stats.totalTechnicians %></div>
+            <div class="stat-hint">Registered field users</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-label">Pending Approvals</div>
+            <div class="stat-value"><%= stats.pendingTechnicians %></div>
+            <div class="stat-hint">Need admin approval</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-label">Work Orders</div>
+            <div class="stat-value"><%= stats.totalWorkOrders %></div>
+            <div class="stat-hint">Total submitted reports</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-label">Photos</div>
+            <div class="stat-value"><%= stats.totalPhotos %></div>
+            <div class="stat-hint">Uploaded evidence photos</div>
           </div>
         </div>
       </div>
 
-      <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <div class="text-muted">Pending Approvals</div>
-            <h3><%= stats.pendingTechnicians %></h3>
-          </div>
+      <div class="help-box">
+        Start from <strong>Work Orders</strong> to review uploaded photos, generate PPT reports, and send emails.
+        Use <strong>Technicians</strong> to approve new app users.
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <a class="quick-action" href="/admin/work-orders">
+            <div class="quick-action-title">Review Work Orders</div>
+            <p class="quick-action-text">Check photos, edited reports, PPT status and email status.</p>
+          </a>
+        </div>
+
+        <div class="col-md-4">
+          <a class="quick-action" href="/admin/technicians">
+            <div class="quick-action-title">Approve Technicians</div>
+            <p class="quick-action-text">Allow new technicians to access and upload from the mobile app.</p>
+          </a>
+        </div>
+
+        <div class="col-md-4">
+          <a class="quick-action" href="/admin/email-recipients">
+            <div class="quick-action-title">Email Setup</div>
+            <p class="quick-action-text">Manage recipients who receive generated PPT reports.</p>
+          </a>
         </div>
       </div>
 
-      <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <div class="text-muted">Work Orders</div>
-            <h3><%= stats.totalWorkOrders %></h3>
-          </div>
+      <div class="card admin-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Recent Work Orders</span>
+          <a href="/admin/work-orders" class="btn btn-sm btn-outline-primary">See All</a>
         </div>
-      </div>
 
-      <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body">
-            <div class="text-muted">Photos</div>
-            <h3><%= stats.totalPhotos %></h3>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card border-0 shadow-sm">
-      <div class="card-header bg-white fw-bold">Recent Work Orders</div>
-      <div class="card-body">
-        <% if (recentWorkOrders.length === 0) { %>
-          <p class="text-muted mb-0">No work orders uploaded yet.</p>
-        <% } else { %>
-          <div class="table-responsive">
-            <table class="table align-middle">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Work Order</th>
-                  <th>Asset ID</th>
-                  <th>Technician</th>
-                  <th>Photos</th>
-                  <th>Status</th>
-                  <th>PPT</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% recentWorkOrders.forEach(function(order) { %>
+        <div class="card-body">
+          <% if (recentWorkOrders.length === 0) { %>
+            <p class="text-muted mb-0">No work orders uploaded yet.</p>
+          <% } else { %>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead>
                   <tr>
-                    <td><%= order.id %></td>
-                    <td><%= order.work_order_number %></td>
-                    <td><%= order.asset_id %></td>
-                    <td>
-                      <%= order.technician_name || 'Unknown' %><br />
-                      <small class="text-muted"><%= order.technician_phone || '' %></small>
-                    </td>
-                    <td><%= order.photo_count %></td>
-                    <td><span class="badge bg-primary"><%= order.status %></span></td>
-                    <td>
-                      <span class="badge bg-secondary"><%= order.ppt_status %></span>
-                      <br />
-                      <a class="btn btn-sm btn-outline-primary mt-1" href="/admin/work-orders/<%= order.id %>">
-                        Review
-                      </a>
-                    </td>
+                    <th>ID</th>
+                    <th>Work Order</th>
+                    <th>Asset ID</th>
+                    <th>Technician</th>
+                    <th>Photos</th>
+                    <th>Status</th>
+                    <th>PPT</th>
+                    <th>Action</th>
                   </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-        <% } %>
+                </thead>
+
+                <tbody>
+                  <% recentWorkOrders.forEach(function(order) { %>
+                    <tr>
+                      <td><%= order.id %></td>
+                      <td class="fw-bold"><%= order.work_order_number %></td>
+                      <td><%= order.asset_id || '-' %></td>
+                      <td>
+                        <%= order.technician_name || 'Unknown' %><br />
+                        <small class="text-muted"><%= order.technician_phone || '' %></small>
+                      </td>
+                      <td><%= order.photo_count %></td>
+                      <td><span class="badge bg-primary"><%= order.status %></span></td>
+                      <td>
+                        <% if (order.ppt_status === 'needs_regeneration') { %>
+                          <span class="badge bg-warning text-dark">Needs Regeneration</span>
+                        <% } else if (order.ppt_status === 'generated') { %>
+                          <span class="badge bg-success">Generated</span>
+                        <% } else if (order.ppt_status === 'failed') { %>
+                          <span class="badge bg-danger">Failed</span>
+                        <% } else { %>
+                          <span class="badge bg-secondary"><%= order.ppt_status || 'not_generated' %></span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <a class="btn btn-sm btn-primary" href="/admin/work-orders/<%= order.id %>">
+                          Review
+                        </a>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
       </div>
-    </div>
-  </main>
+    </main>
+  </div>
 </body>
 </html>
