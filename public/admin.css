@@ -372,3 +372,11 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.admin-nav form button {
+  color: #fca5a5;
+}
+
+.admin-nav form button:hover {
+  background: rgba(220, 38, 38, 0.14);
+  color: #ffffff;
+}
