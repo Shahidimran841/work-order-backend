@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const archiver = require("archiver");
+
+const archiverModule = require("archiver");
+const archiver = archiverModule.default || archiverModule;
 
 const {
   getStorageDir,
@@ -26,6 +28,11 @@ async function createBackupZip() {
 
   const databasePath = getStoragePath("database", "work_order_app.sqlite");
   const uploadsDir = getStorageDir("uploads");
+  console.log("Backup database path:", databasePath);
+console.log("Database exists:", fs.existsSync(databasePath));
+console.log("Backup uploads path:", uploadsDir);
+console.log("Uploads exists:", fs.existsSync(uploadsDir));
+console.log("Archiver type:", typeof archiver);
 
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(backupPath);
