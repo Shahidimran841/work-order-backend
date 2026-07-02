@@ -262,7 +262,196 @@ async function uploadWorkOrder(req, res) {
     });
   }
 }
+async function addPhotosToExistingWorkOrder(req, res) {
+  const db = getDatabase();
 
+  try {
+    console.log("ADD PHOTOS API HIT");
+    console.log("User:", req.user);
+    console.log("Body:", req.body);
+    console.log("Files:", req.files ? req.files.length : 0);
+
+    const {
+      workOrderId,
+      workOrderNumber,
+      assetId,
+      notes,
+      submittedAt,
+      metadata,
+    } = req.body;
+
+    const technicianId = req.user ? req.user.id : null;
+    const files = req.files || [];
+
+    if (!technicianId) {
+      cleanupUploadedTempFiles(files);
+
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    if (files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please add at least one photo",
+      });
+    }
+
+    let workOrder = null;
+
+    if (workOrderId) {
+      workOrder = await db.get(
+        `
+        SELECT *
+        FROM work_orders
+        WHERE id = ?
+          AND technician_id = ?
+        `,
+        [workOrderId, technicianId]
+      );
+    }
+
+    if (!workOrder && workOrderNumber) {
+      workOrder = await db.get(
+        `
+        SELECT *
+        FROM work_orders
+        WHERE work_order_number = ?
+          AND technician_id = ?
+          AND asset_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [workOrderNumber, technicianId, assetId || ""]
+      );
+    }
+
+    if (!workOrder) {
+      cleanupUploadedTempFiles(files);
+
+      return res.status(404).json({
+        success: false,
+        message: "Existing work order not found for editing",
+      });
+    }
+
+    const parsedMetadata = metadata ? JSON.parse(metadata) : {};
+
+    await db.run("BEGIN TRANSACTION");
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const stage = req.body[`photo_${i}_stage`] || "Unknown";
+
+      const relativePath = await moveFileToOrganizedFolder({
+        file,
+        technicianId,
+        workOrderNumber: workOrder.work_order_number,
+        stage,
+      });
+
+      await db.run(
+        `
+        INSERT INTO work_order_photos (
+          work_order_id,
+          stage,
+          captured_time,
+          display_time,
+          latitude,
+          longitude,
+          original_name,
+          file_name,
+          file_path,
+          uploaded_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          workOrder.id,
+          stage,
+          req.body[`photo_${i}_time`] || "",
+          req.body[`photo_${i}_displayTime`] || "",
+          req.body[`photo_${i}_latitude`] || "",
+          req.body[`photo_${i}_longitude`] || "",
+          file.originalname,
+          file.filename,
+          relativePath,
+          new Date().toISOString(),
+        ]
+      );
+    }
+
+    await db.run(
+      `
+      UPDATE work_orders
+      SET notes = ?,
+          submitted_at = ?,
+          metadata_json = ?,
+          ppt_status = ?,
+          ppt_file_path = ?,
+          email_status = ?,
+          email_sent_at = ?,
+          email_error = ?
+      WHERE id = ?
+      `,
+      [
+        notes || workOrder.notes || "",
+        submittedAt || new Date().toISOString(),
+        JSON.stringify(parsedMetadata),
+        "not_generated",
+        "",
+        "Not Sent",
+        null,
+        "",
+        workOrder.id,
+      ]
+    );
+
+    await db.run(
+      `
+      UPDATE ppt_reports
+      SET status = ?,
+          error_message = ?
+      WHERE work_order_id = ?
+      `,
+      ["outdated_after_photo_update", "", workOrder.id]
+    );
+
+    await db.run("COMMIT");
+
+    const totalPhotos = await db.get(
+      `
+      SELECT COUNT(*) AS count
+      FROM work_order_photos
+      WHERE work_order_id = ?
+      `,
+      workOrder.id
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Photos added to existing work order successfully",
+      serverWorkOrderId: workOrder.id,
+      addedPhotoCount: files.length,
+      totalPhotoCount: totalPhotos ? totalPhotos.count : files.length,
+      pptStatus: "not_generated",
+    });
+  } catch (error) {
+    await db.run("ROLLBACK").catch(() => {});
+
+    cleanupUploadedTempFiles(req.files || []);
+
+    console.error("Add photos to work order error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to add photos to existing work order",
+      error: error.message,
+    });
+  }
+}
 async function getMyWorkOrders(req, res) {
   try {
     const db = getDatabase();
@@ -396,6 +585,7 @@ async function getWorkOrderDetails(req, res) {
 
 module.exports = {
   uploadWorkOrder,
+  addPhotosToExistingWorkOrder,
   getMyWorkOrders,
   getAllWorkOrders,
   getWorkOrderDetails,
