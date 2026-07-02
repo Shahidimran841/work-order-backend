@@ -125,7 +125,19 @@ function getBackupsList() {
     })
     .filter((backup) => backup.size > 0)
     .sort((a, b) => b.createdAt - a.createdAt);
+const zeroSizeFiles = fs
+  .readdirSync(backupsDir)
+  .filter((fileName) => fileName.endsWith(".zip"))
+  .filter((fileName) => {
+    const filePath = path.join(backupsDir, fileName);
+    return fs.statSync(filePath).size === 0;
+  });
 
+for (const fileName of zeroSizeFiles) {
+  try {
+    fs.unlinkSync(path.join(backupsDir, fileName));
+  } catch (_) {}
+}
   return files;
 }
 
