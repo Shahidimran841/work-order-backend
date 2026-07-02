@@ -1,8 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-
-const archiverModule = require("archiver");
-const archiver = archiverModule.default || archiverModule;
+const AdmZip = require("adm-zip");
 
 const {
   getStorageDir,
@@ -19,103 +17,117 @@ function ensureDir(dirPath) {
   }
 }
 
+function deleteZeroSizeBackupFiles(backupsDir) {
+  if (!fs.existsSync(backupsDir)) {
+    return;
+  }
+
+  const files = fs.readdirSync(backupsDir);
+
+  for (const fileName of files) {
+    if (!fileName.endsWith(".zip")) {
+      continue;
+    }
+
+    const filePath = path.join(backupsDir, fileName);
+    const stats = fs.statSync(filePath);
+
+    if (stats.size === 0) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (_) {}
+    }
+  }
+}
+
 async function createBackupZip() {
   const backupsDir = getStorageDir("backups");
   ensureDir(backupsDir);
+  deleteZeroSizeBackupFiles(backupsDir);
 
   const fileName = `work_order_backup_${safeTimestamp()}.zip`;
   const backupPath = path.join(backupsDir, fileName);
 
   const databasePath = getStoragePath("database", "work_order_app.sqlite");
   const uploadsDir = getStorageDir("uploads");
+
   console.log("Backup database path:", databasePath);
-console.log("Database exists:", fs.existsSync(databasePath));
-console.log("Backup uploads path:", uploadsDir);
-console.log("Uploads exists:", fs.existsSync(uploadsDir));
-console.log("Archiver type:", typeof archiver);
+  console.log("Database exists:", fs.existsSync(databasePath));
+  console.log("Backup uploads path:", uploadsDir);
+  console.log("Uploads exists:", fs.existsSync(uploadsDir));
 
-  return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(backupPath);
-
-    const archive = archiver("zip", {
-      zlib: {
-        level: 9,
-      },
-    });
-
-    output.on("close", () => {
-      const stats = fs.statSync(backupPath);
-
-      if (stats.size === 0) {
-        try {
-          fs.unlinkSync(backupPath);
-        } catch (_) {}
-
-        return reject(new Error("Backup ZIP was created but it is empty."));
-      }
-
-      return resolve({
-        fileName,
-        path: backupPath,
-        size: stats.size,
-        createdAt: new Date(),
-      });
-    });
-
-    output.on("error", (error) => {
-      try {
-        if (fs.existsSync(backupPath)) {
-          fs.unlinkSync(backupPath);
-        }
-      } catch (_) {}
-
-      return reject(error);
-    });
-
-    archive.on("error", (error) => {
-      try {
-        if (fs.existsSync(backupPath)) {
-          fs.unlinkSync(backupPath);
-        }
-      } catch (_) {}
-
-      return reject(error);
-    });
-
-    archive.pipe(output);
+  try {
+    const zip = new AdmZip();
 
     if (fs.existsSync(databasePath)) {
-      archive.file(databasePath, {
-        name: "database/work_order_app.sqlite",
-      });
+      zip.addLocalFile(
+        databasePath,
+        "database",
+        "work_order_app.sqlite"
+      );
     }
 
     if (fs.existsSync(uploadsDir)) {
-      archive.directory(uploadsDir, "uploads");
+      zip.addLocalFolder(
+        uploadsDir,
+        "uploads"
+      );
     }
 
-    archive.append(
-      JSON.stringify(
-        {
-          createdAt: new Date().toISOString(),
-          databaseIncluded: fs.existsSync(databasePath),
-          uploadsIncluded: fs.existsSync(uploadsDir),
-        },
-        null,
-        2
-      ),
-      {
-        name: "backup_info.json",
-      }
+    zip.addFile(
+      "backup_info.json",
+      Buffer.from(
+        JSON.stringify(
+          {
+            createdAt: new Date().toISOString(),
+            databaseIncluded: fs.existsSync(databasePath),
+            uploadsIncluded: fs.existsSync(uploadsDir),
+            databasePath,
+            uploadsDir,
+          },
+          null,
+          2
+        )
+      )
     );
 
-    archive.finalize();
-  });
+    zip.writeZip(backupPath);
+
+    if (!fs.existsSync(backupPath)) {
+      throw new Error("Backup file was not created.");
+    }
+
+    const stats = fs.statSync(backupPath);
+
+    if (stats.size === 0) {
+      try {
+        fs.unlinkSync(backupPath);
+      } catch (_) {}
+
+      throw new Error("Backup ZIP was created but it is empty.");
+    }
+
+    return {
+      fileName,
+      path: backupPath,
+      size: stats.size,
+      createdAt: new Date(),
+    };
+  } catch (error) {
+    try {
+      if (fs.existsSync(backupPath)) {
+        fs.unlinkSync(backupPath);
+      }
+    } catch (_) {}
+
+    throw error;
+  }
 }
 
 function getBackupsList() {
   const backupsDir = getStorageDir("backups");
   ensureDir(backupsDir);
+  deleteZeroSizeBackupFiles(backupsDir);
 
   const files = fs
     .readdirSync(backupsDir)
@@ -132,19 +144,7 @@ function getBackupsList() {
     })
     .filter((backup) => backup.size > 0)
     .sort((a, b) => b.createdAt - a.createdAt);
-const zeroSizeFiles = fs
-  .readdirSync(backupsDir)
-  .filter((fileName) => fileName.endsWith(".zip"))
-  .filter((fileName) => {
-    const filePath = path.join(backupsDir, fileName);
-    return fs.statSync(filePath).size === 0;
-  });
 
-for (const fileName of zeroSizeFiles) {
-  try {
-    fs.unlinkSync(path.join(backupsDir, fileName));
-  } catch (_) {}
-}
   return files;
 }
 
