@@ -2,55 +2,80 @@ const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");
 
-function ensureBackupFolder() {
-  const backupDir = path.join(__dirname, "..", "backups");
+const {
+  getStorageDir,
+  getStoragePath,
+} = require("./storage_service");
 
-  if (!fs.existsSync(backupDir)) {
-    fs.mkdirSync(backupDir, { recursive: true });
-  }
-
-  return backupDir;
+function safeTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-function createBackupZip() {
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+async function createBackupZip() {
+  const backupsDir = getStorageDir("backups");
+  ensureDir(backupsDir);
+
+  const fileName = `work_order_backup_${safeTimestamp()}.zip`;
+  const backupPath = path.join(backupsDir, fileName);
+
+  const databasePath = getStoragePath("database", "work_order_app.sqlite");
+  const uploadsDir = getStorageDir("uploads");
+
   return new Promise((resolve, reject) => {
-    const backupDir = ensureBackupFolder();
+    const output = fs.createWriteStream(backupPath);
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/:/g, "-")
-      .replace(/\./g, "-");
-
-    const backupFileName = `work_order_backup_${timestamp}.zip`;
-    const backupFilePath = path.join(backupDir, backupFileName);
-
-    const output = fs.createWriteStream(backupFilePath);
     const archive = archiver("zip", {
-      zlib: { level: 9 },
+      zlib: {
+        level: 9,
+      },
     });
 
     output.on("close", () => {
-      resolve({
-        fileName: backupFileName,
-        filePath: backupFilePath,
-        size: archive.pointer(),
+      const stats = fs.statSync(backupPath);
+
+      if (stats.size === 0) {
+        try {
+          fs.unlinkSync(backupPath);
+        } catch (_) {}
+
+        return reject(new Error("Backup ZIP was created but it is empty."));
+      }
+
+      return resolve({
+        fileName,
+        path: backupPath,
+        size: stats.size,
+        createdAt: new Date(),
       });
     });
 
+    output.on("error", (error) => {
+      try {
+        if (fs.existsSync(backupPath)) {
+          fs.unlinkSync(backupPath);
+        }
+      } catch (_) {}
+
+      return reject(error);
+    });
+
     archive.on("error", (error) => {
-      reject(error);
+      try {
+        if (fs.existsSync(backupPath)) {
+          fs.unlinkSync(backupPath);
+        }
+      } catch (_) {}
+
+      return reject(error);
     });
 
     archive.pipe(output);
-
-    const databasePath = path.join(
-      __dirname,
-      "..",
-      "database",
-      "work_order_app.sqlite"
-    );
-
-    const uploadsPath = path.join(__dirname, "..", "uploads");
 
     if (fs.existsSync(databasePath)) {
       archive.file(databasePath, {
@@ -58,31 +83,47 @@ function createBackupZip() {
       });
     }
 
-    if (fs.existsSync(uploadsPath)) {
-      archive.directory(uploadsPath, "uploads");
+    if (fs.existsSync(uploadsDir)) {
+      archive.directory(uploadsDir, "uploads");
     }
+
+    archive.append(
+      JSON.stringify(
+        {
+          createdAt: new Date().toISOString(),
+          databaseIncluded: fs.existsSync(databasePath),
+          uploadsIncluded: fs.existsSync(uploadsDir),
+        },
+        null,
+        2
+      ),
+      {
+        name: "backup_info.json",
+      }
+    );
 
     archive.finalize();
   });
 }
 
 function getBackupsList() {
-  const backupDir = ensureBackupFolder();
+  const backupsDir = getStorageDir("backups");
+  ensureDir(backupsDir);
 
   const files = fs
-    .readdirSync(backupDir)
-    .filter((file) => file.endsWith(".zip"))
-    .map((file) => {
-      const filePath = path.join(backupDir, file);
+    .readdirSync(backupsDir)
+    .filter((fileName) => fileName.endsWith(".zip"))
+    .map((fileName) => {
+      const filePath = path.join(backupsDir, fileName);
       const stats = fs.statSync(filePath);
 
       return {
-        fileName: file,
-        filePath,
+        fileName,
         size: stats.size,
-        createdAt: stats.birthtime,
+        createdAt: stats.birthtime || stats.mtime,
       };
     })
+    .filter((backup) => backup.size > 0)
     .sort((a, b) => b.createdAt - a.createdAt);
 
   return files;

@@ -786,7 +786,7 @@ async function createBackup(req, res) {
 async function downloadBackup(req, res) {
   const { fileName } = req.params;
 
-  const backupPath = path.join(__dirname, "..", "backups", fileName);
+  const backupPath = getStorageDir("backups", fileName);
 
   if (!fs.existsSync(backupPath)) {
     return res.status(404).send("Backup file not found");
