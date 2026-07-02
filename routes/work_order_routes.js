@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
   uploadWorkOrder,
+  addPhotosToExistingWorkOrder,
   getMyWorkOrders,
   getAllWorkOrders,
   getWorkOrderDetails,
@@ -20,6 +21,13 @@ router.post(
   protectApi,
   uploadWorkOrderPhotos.array("photos", 100),
   uploadWorkOrder
+);
+
+router.post(
+  "/add-photos",
+  protectApi,
+  uploadWorkOrderPhotos.array("photos", 100),
+  addPhotosToExistingWorkOrder
 );
 
 router.get("/my", protectApi, getMyWorkOrders);
