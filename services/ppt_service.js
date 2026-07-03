@@ -143,7 +143,7 @@ function addDynamicTitle(pptx, slide, title) {
 
   slide.addText(title, {
     x: 3.3,
-    y: 1.72,
+     y: 1.48,
     w: 6.8,
     h: 0.45,
     fontSize: 22,
@@ -214,15 +214,11 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
 }
 
 function getSlotsForPhotoCount(count) {
-  // 1 photo = centered, decent width, not too wide
-  // 2 photos = 50 / 50
-  // 3 photos = 3 equal columns
-
   if (count === 1) {
     return [
       {
         x: 3.0,
-        y: 2.72,
+        y: 2.48,
         w: 7.3,
         h: 3.65,
       },
@@ -233,13 +229,13 @@ function getSlotsForPhotoCount(count) {
     return [
       {
         x: 0.85,
-        y: 2.72,
+        y: 2.48,
         w: 5.55,
         h: 3.65,
       },
       {
         x: 6.95,
-        y: 2.72,
+        y: 2.48,
         w: 5.55,
         h: 3.65,
       },
@@ -249,19 +245,19 @@ function getSlotsForPhotoCount(count) {
   return [
     {
       x: 0.55,
-      y: 2.72,
+      y: 2.48,
       w: 3.85,
       h: 3.65,
     },
     {
       x: 4.75,
-      y: 2.72,
+      y: 2.48,
       w: 3.85,
       h: 3.65,
     },
     {
       x: 8.95,
-      y: 2.72,
+      y: 2.48,
       w: 3.85,
       h: 3.65,
     },
@@ -304,13 +300,11 @@ function getContainPosition(imagePath, boxX, boxY, boxW, boxH) {
   }
 }
 function hidePhotoPlaceholderArea(pptx, slide) {
-  // This hides old Picture 1 / Picture 2 / Picture 3 text from the template.
-  // Footer is added again after photos, so footer will stay visible.
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.35,
-    y: 2.45,
+    y: 2.25,
     w: 12.65,
-    h: 4.12,
+    h: 4.32,
     fill: { color: "FFFFFF" },
     line: { color: "FFFFFF" },
   });
