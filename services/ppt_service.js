@@ -214,34 +214,58 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
 }
 
 function getSlotsForPhotoCount(count) {
-  // Equal page division according to number of photos on slide.
-  // 1 photo = full width
+  // 1 photo = centered, decent width, not too wide
   // 2 photos = 50 / 50
-  // 3 photos = 3 equal parts
+  // 3 photos = 3 equal columns
 
-  const photoArea = {
-    x: 0.55,
-    y: 2.65,
-    w: 12.25,
-    h: 3.85,
-  };
-
-  const gap = 0.18;
-  const safeCount = Math.max(1, Math.min(count, 3));
-  const slotWidth = (photoArea.w - gap * (safeCount - 1)) / safeCount;
-
-  const slots = [];
-
-  for (let i = 0; i < safeCount; i++) {
-    slots.push({
-      x: photoArea.x + i * (slotWidth + gap),
-      y: photoArea.y,
-      w: slotWidth,
-      h: photoArea.h,
-    });
+  if (count === 1) {
+    return [
+      {
+        x: 3.0,
+        y: 2.72,
+        w: 7.3,
+        h: 3.65,
+      },
+    ];
   }
 
-  return slots;
+  if (count === 2) {
+    return [
+      {
+        x: 0.85,
+        y: 2.72,
+        w: 5.55,
+        h: 3.65,
+      },
+      {
+        x: 6.95,
+        y: 2.72,
+        w: 5.55,
+        h: 3.65,
+      },
+    ];
+  }
+
+  return [
+    {
+      x: 0.55,
+      y: 2.72,
+      w: 3.85,
+      h: 3.65,
+    },
+    {
+      x: 4.75,
+      y: 2.72,
+      w: 3.85,
+      h: 3.65,
+    },
+    {
+      x: 8.95,
+      y: 2.72,
+      w: 3.85,
+      h: 3.65,
+    },
+  ];
 }
 function getContainPosition(imagePath, boxX, boxY, boxW, boxH) {
   try {
