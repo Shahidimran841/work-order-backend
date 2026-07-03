@@ -3,6 +3,7 @@ const { createActivityLog } = require("../services/log_service");
 const {
   getStoredFileAbsolutePath,
   getStorageDir,
+  toPublicPath,
 } = require("../services/storage_service");
 
 const {
@@ -804,10 +805,63 @@ async function pptSettingsPage(req, res) {
     error: null,
   });
 }
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
 
+function savePptLogoFile(file, logoName) {
+  if (!file) {
+    return "";
+  }
+
+  const allowedExtensions = [".png", ".jpg", ".jpeg"];
+
+  const originalExtension = path.extname(file.originalname || "").toLowerCase();
+
+  if (!allowedExtensions.includes(originalExtension)) {
+    throw new Error("Only PNG, JPG, and JPEG logo files are allowed.");
+  }
+
+  const logosDir = getStorageDir("uploads", "ppt-logos");
+  ensureDir(logosDir);
+
+  const fileName = `${logoName}-${Date.now()}${originalExtension}`;
+  const targetPath = path.join(logosDir, fileName);
+
+  fs.renameSync(file.path, targetPath);
+
+  return toPublicPath(path.join("uploads", "ppt-logos", fileName));
+}
 async function savePptSettings(req, res) {
   try {
-    await updatePptSettings(req.body);
+    const files = req.files || {};
+
+    const logoPaths = {};
+
+    if (files.topLeftLogo && files.topLeftLogo[0]) {
+      logoPaths.topLeftLogoPath = savePptLogoFile(
+        files.topLeftLogo[0],
+        "top-left-logo"
+      );
+    }
+
+    if (files.centerLogo && files.centerLogo[0]) {
+      logoPaths.centerLogoPath = savePptLogoFile(
+        files.centerLogo[0],
+        "center-logo"
+      );
+    }
+
+    if (files.topRightLogo && files.topRightLogo[0]) {
+      logoPaths.topRightLogoPath = savePptLogoFile(
+        files.topRightLogo[0],
+        "top-right-logo"
+      );
+    }
+
+    await updatePptSettings(req.body, logoPaths);
 
     const settings = await getPptSettings();
 

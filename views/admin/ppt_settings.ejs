@@ -13,63 +13,65 @@
 <body>
   <div class="admin-layout">
     <aside class="admin-sidebar">
-  <div class="admin-logo-wrap">
-    <div class="admin-logo">WO</div>
-    <div>
-      <div class="admin-brand">Work Order Admin</div>
-      <div class="admin-brand-subtitle">Operations Portal</div>
-    </div>
-  </div>
+      <div class="admin-logo-wrap">
+        <div class="admin-logo">WO</div>
+        <div>
+          <div class="admin-brand">Work Order Admin</div>
+          <div class="admin-brand-subtitle">Operations Portal</div>
+        </div>
+      </div>
 
-  <div class="admin-nav">
-    <a href="/admin">
-      <span class="admin-nav-icon">▣</span>
-      Dashboard
-    </a>
+      <div class="admin-nav">
+        <a href="/admin">
+          <span class="admin-nav-icon">▣</span>
+          Dashboard
+        </a>
 
-    <a href="/admin/work-orders">
-      <span class="admin-nav-icon">▤</span>
-      Work Orders
-    </a>
+        <a href="/admin/work-orders">
+          <span class="admin-nav-icon">▤</span>
+          Work Orders
+        </a>
 
-    <a href="/admin/technicians">
-      <span class="admin-nav-icon">◉</span>
-      Technicians
-    </a>
+        <a href="/admin/technicians">
+          <span class="admin-nav-icon">◉</span>
+          Technicians
+        </a>
 
-    <a href="/admin/email-recipients">
-      <span class="admin-nav-icon">✉</span>
-      Email Setup
-    </a>
+        <a href="/admin/email-recipients">
+          <span class="admin-nav-icon">✉</span>
+          Email Setup
+        </a>
 
-    <a class="active" href="/admin/ppt-settings">
-      <span class="admin-nav-icon">▧</span>
-      PPT Settings
-    </a>
+        <a class="active" href="/admin/ppt-settings">
+          <span class="admin-nav-icon">▧</span>
+          PPT Settings
+        </a>
 
-    <a href="/admin/activity-logs">
-      <span class="admin-nav-icon">◎</span>
-      Activity Logs
-    </a>
+        <a href="/admin/activity-logs">
+          <span class="admin-nav-icon">◎</span>
+          Activity Logs
+        </a>
 
-    <a href="/admin/backups">
-      <span class="admin-nav-icon">⬒</span>
-      Backups
-    </a>
+        <a href="/admin/backups">
+          <span class="admin-nav-icon">⬒</span>
+          Backups
+        </a>
 
-    <form method="POST" action="/admin/logout" class="mt-3">
-      <button type="submit">
-        <span class="admin-nav-icon">↳</span>
-        Logout
-      </button>
-    </form>
-  </div>
-</aside>
+        <form method="POST" action="/admin/logout" class="mt-3">
+          <button type="submit">
+            <span class="admin-nav-icon">↳</span>
+            Logout
+          </button>
+        </form>
+      </div>
+    </aside>
 
     <main class="admin-content">
       <div class="mb-4">
         <h3 class="page-title">PPT Settings</h3>
-        <p class="page-subtitle">Control footer text and layout settings for generated PowerPoint reports.</p>
+        <p class="page-subtitle">
+          Manage report footer, layout, and PPT header logos.
+        </p>
       </div>
 
       <% if (message) { %>
@@ -81,16 +83,16 @@
       <% } %>
 
       <div class="help-box">
-        These settings appear in generated PPT reports. Update them before generating final client reports.
+        Upload PNG or JPG logos. Enabled logos will appear in the generated PPT at top-left, center, or top-right.
       </div>
 
-      <div class="row g-4">
-        <div class="col-lg-7">
-          <div class="card admin-card">
-            <div class="card-header">Footer Settings</div>
+      <form method="POST" action="/admin/ppt-settings" enctype="multipart/form-data">
+        <div class="row g-4">
+          <div class="col-lg-7">
+            <div class="card admin-card mb-4">
+              <div class="card-header">Footer Settings</div>
 
-            <div class="card-body">
-              <form method="POST" action="/admin/ppt-settings">
+              <div class="card-body">
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Project Name</label>
                   <input
@@ -153,7 +155,7 @@
                   <label class="form-check-label">Show Work Order Number</label>
                 </div>
 
-                <div class="form-check form-switch mb-4">
+                <div class="form-check form-switch mb-0">
                   <input
                     class="form-check-input"
                     type="checkbox"
@@ -162,32 +164,151 @@
                   />
                   <label class="form-check-label">Show Page Number</label>
                 </div>
+              </div>
+            </div>
 
-                <button class="btn btn-primary" type="submit">
-                  Save PPT Settings
-                </button>
-              </form>
+            <div class="card admin-card">
+              <div class="card-header">PPT Header Logos</div>
+
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <div class="border rounded-4 p-3 h-100">
+                      <div class="fw-bold mb-2">Top Left Logo</div>
+
+                      <% if (settings.topLeftLogoPath) { %>
+                        <img
+                          src="/<%= settings.topLeftLogoPath %>"
+                          alt="Top Left Logo"
+                          style="width: 100%; height: 80px; object-fit: contain;"
+                          class="border rounded bg-light mb-2"
+                        />
+                      <% } else { %>
+                        <div class="border rounded bg-light d-flex align-items-center justify-content-center mb-2" style="height: 80px;">
+                          <small class="text-muted">No logo</small>
+                        </div>
+                      <% } %>
+
+                      <input
+                        class="form-control form-control-sm mb-2"
+                        type="file"
+                        name="topLeftLogo"
+                        accept=".png,.jpg,.jpeg"
+                      />
+
+                      <div class="form-check form-switch">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          name="topLeftLogoEnabled"
+                          <%= settings.topLeftLogoEnabled ? 'checked' : '' %>
+                        />
+                        <label class="form-check-label">Enabled</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-4">
+                    <div class="border rounded-4 p-3 h-100">
+                      <div class="fw-bold mb-2">Center Logo</div>
+
+                      <% if (settings.centerLogoPath) { %>
+                        <img
+                          src="/<%= settings.centerLogoPath %>"
+                          alt="Center Logo"
+                          style="width: 100%; height: 80px; object-fit: contain;"
+                          class="border rounded bg-light mb-2"
+                        />
+                      <% } else { %>
+                        <div class="border rounded bg-light d-flex align-items-center justify-content-center mb-2" style="height: 80px;">
+                          <small class="text-muted">No logo</small>
+                        </div>
+                      <% } %>
+
+                      <input
+                        class="form-control form-control-sm mb-2"
+                        type="file"
+                        name="centerLogo"
+                        accept=".png,.jpg,.jpeg"
+                      />
+
+                      <div class="form-check form-switch">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          name="centerLogoEnabled"
+                          <%= settings.centerLogoEnabled ? 'checked' : '' %>
+                        />
+                        <label class="form-check-label">Enabled</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-4">
+                    <div class="border rounded-4 p-3 h-100">
+                      <div class="fw-bold mb-2">Top Right Logo</div>
+
+                      <% if (settings.topRightLogoPath) { %>
+                        <img
+                          src="/<%= settings.topRightLogoPath %>"
+                          alt="Top Right Logo"
+                          style="width: 100%; height: 80px; object-fit: contain;"
+                          class="border rounded bg-light mb-2"
+                        />
+                      <% } else { %>
+                        <div class="border rounded bg-light d-flex align-items-center justify-content-center mb-2" style="height: 80px;">
+                          <small class="text-muted">No logo</small>
+                        </div>
+                      <% } %>
+
+                      <input
+                        class="form-control form-control-sm mb-2"
+                        type="file"
+                        name="topRightLogo"
+                        accept=".png,.jpg,.jpeg"
+                      />
+
+                      <div class="form-check form-switch">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          name="topRightLogoEnabled"
+                          <%= settings.topRightLogoEnabled ? 'checked' : '' %>
+                        />
+                        <label class="form-check-label">Enabled</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-4">
+                  <button class="btn btn-primary" type="submit">
+                    Save PPT Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-5">
+            <div class="card admin-card">
+              <div class="card-header">Photo Layout Rules</div>
+
+              <div class="card-body">
+                <ul class="mb-0">
+                  <li>Maximum 3 photos per page.</li>
+                  <li>If 3 photos are available, they use 3 equal slots.</li>
+                  <li>If 2 photos are left, they use 50% / 50% layout.</li>
+                  <li>If 1 photo is left, it uses the full photo area.</li>
+                  <li>Only enabled logos are shown in the PPT.</li>
+                  <li>Disabled logo areas remain blank.</li>
+                  <li>Page number format is: Page Number: 1 of 7.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
-
-        <div class="col-lg-5">
-          <div class="card admin-card">
-            <div class="card-header">Photo Layout Rules</div>
-
-            <div class="card-body">
-              <ul class="mb-0">
-                <li>Maximum 3 photos per page.</li>
-                <li>If 3 photos are available, they use 3 equal slots.</li>
-                <li>If 2 photos are left, they use 50% / 50% layout.</li>
-                <li>If 1 photo is left, it uses the full photo area.</li>
-                <li>Header logos and selected footer fields remain visible.</li>
-                <li>Page number format is: Page Number: 1 of 7.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
+      </form>
     </main>
   </div>
 </body>

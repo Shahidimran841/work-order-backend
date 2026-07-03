@@ -95,7 +95,16 @@ router.get("/backups", requireAdminSession, backupsPage);
 router.post("/backups/create", requireAdminSession, createBackup);
 router.get("/backups/:fileName/download", requireAdminSession, downloadBackup);
 router.get("/ppt-settings", requireAdminSession, pptSettingsPage);
-router.post("/ppt-settings", requireAdminSession, savePptSettings);
+router.post(
+  "/ppt-settings",
+  requireAdminSession,
+  uploadWorkOrderPhotos.fields([
+    { name: "topLeftLogo", maxCount: 1 },
+    { name: "centerLogo", maxCount: 1 },
+    { name: "topRightLogo", maxCount: 1 },
+  ]),
+  savePptSettings
+);
 router.post("/work-orders/:id/delete",requireAdminSession,deleteWorkOrder);
 router.post(
   "/technicians/:id/delete",

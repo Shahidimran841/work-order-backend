@@ -9,6 +9,15 @@ const defaultPptSettings = {
   PPT_SHOW_PROJECT_CODE: "true",
   PPT_SHOW_WORK_ORDER_NUMBER: "true",
   PPT_SHOW_PAGE_NUMBER: "true",
+
+  PPT_TOP_LEFT_LOGO_ENABLED: "true",
+  PPT_TOP_LEFT_LOGO_PATH: "",
+
+  PPT_CENTER_LOGO_ENABLED: "true",
+  PPT_CENTER_LOGO_PATH: "",
+
+  PPT_TOP_RIGHT_LOGO_ENABLED: "true",
+  PPT_TOP_RIGHT_LOGO_PATH: "",
 };
 
 async function getSetting(key, fallbackValue = "") {
@@ -99,14 +108,50 @@ async function getPptSettings() {
         "PPT_SHOW_PAGE_NUMBER",
         defaultPptSettings.PPT_SHOW_PAGE_NUMBER
       )) === "true",
+
+    topLeftLogoEnabled:
+      (await getSetting(
+        "PPT_TOP_LEFT_LOGO_ENABLED",
+        defaultPptSettings.PPT_TOP_LEFT_LOGO_ENABLED
+      )) === "true",
+
+    topLeftLogoPath: await getSetting(
+      "PPT_TOP_LEFT_LOGO_PATH",
+      defaultPptSettings.PPT_TOP_LEFT_LOGO_PATH
+    ),
+
+    centerLogoEnabled:
+      (await getSetting(
+        "PPT_CENTER_LOGO_ENABLED",
+        defaultPptSettings.PPT_CENTER_LOGO_ENABLED
+      )) === "true",
+
+    centerLogoPath: await getSetting(
+      "PPT_CENTER_LOGO_PATH",
+      defaultPptSettings.PPT_CENTER_LOGO_PATH
+    ),
+
+    topRightLogoEnabled:
+      (await getSetting(
+        "PPT_TOP_RIGHT_LOGO_ENABLED",
+        defaultPptSettings.PPT_TOP_RIGHT_LOGO_ENABLED
+      )) === "true",
+
+    topRightLogoPath: await getSetting(
+      "PPT_TOP_RIGHT_LOGO_PATH",
+      defaultPptSettings.PPT_TOP_RIGHT_LOGO_PATH
+    ),
   };
 }
 
-async function updatePptSettings(body) {
+async function updatePptSettings(body, logoPaths = {}) {
   await setSetting("PPT_PROJECT_NAME", body.projectName || "");
   await setSetting("PPT_PROJECT_CODE", body.projectCode || "");
 
-  await setSetting("PPT_SHOW_FOOTER", body.showFooter === "on" ? "true" : "false");
+  await setSetting(
+    "PPT_SHOW_FOOTER",
+    body.showFooter === "on" ? "true" : "false"
+  );
 
   await setSetting(
     "PPT_SHOW_PROJECT_NAME",
@@ -127,6 +172,33 @@ async function updatePptSettings(body) {
     "PPT_SHOW_PAGE_NUMBER",
     body.showPageNumber === "on" ? "true" : "false"
   );
+
+  await setSetting(
+    "PPT_TOP_LEFT_LOGO_ENABLED",
+    body.topLeftLogoEnabled === "on" ? "true" : "false"
+  );
+
+  await setSetting(
+    "PPT_CENTER_LOGO_ENABLED",
+    body.centerLogoEnabled === "on" ? "true" : "false"
+  );
+
+  await setSetting(
+    "PPT_TOP_RIGHT_LOGO_ENABLED",
+    body.topRightLogoEnabled === "on" ? "true" : "false"
+  );
+
+  if (logoPaths.topLeftLogoPath) {
+    await setSetting("PPT_TOP_LEFT_LOGO_PATH", logoPaths.topLeftLogoPath);
+  }
+
+  if (logoPaths.centerLogoPath) {
+    await setSetting("PPT_CENTER_LOGO_PATH", logoPaths.centerLogoPath);
+  }
+
+  if (logoPaths.topRightLogoPath) {
+    await setSetting("PPT_TOP_RIGHT_LOGO_PATH", logoPaths.topRightLogoPath);
+  }
 }
 
 module.exports = {

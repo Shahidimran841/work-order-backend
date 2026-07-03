@@ -63,7 +63,74 @@ function addTemplateBackground(pptx, slide) {
     slide.background = { color: "FFFFFF" };
   }
 }
+function addLogoImage(pptx, slide, logoPath, box) {
+  addWhiteBox(pptx, slide, box.x, box.y, box.w, box.h);
 
+  if (!logoPath) {
+    return;
+  }
+
+  const absoluteLogoPath = getAbsolutePath(logoPath);
+
+  if (!fs.existsSync(absoluteLogoPath)) {
+    return;
+  }
+
+  const logoPosition = getContainPosition(
+    absoluteLogoPath,
+    box.x + 0.05,
+    box.y + 0.05,
+    box.w - 0.1,
+    box.h - 0.1
+  );
+
+  slide.addImage({
+    path: absoluteLogoPath,
+    x: logoPosition.x,
+    y: logoPosition.y,
+    w: logoPosition.w,
+    h: logoPosition.h,
+  });
+}
+
+function addPptLogos(pptx, slide, settings) {
+  const topLeftBox = {
+    x: 0.35,
+    y: 0.18,
+    w: 2.2,
+    h: 0.8,
+  };
+
+  const centerBox = {
+    x: 5.3,
+    y: 0.12,
+    w: 2.75,
+    h: 0.9,
+  };
+
+  const topRightBox = {
+    x: 10.75,
+    y: 0.18,
+    w: 2.2,
+    h: 0.8,
+  };
+
+  addWhiteBox(pptx, slide, topLeftBox.x, topLeftBox.y, topLeftBox.w, topLeftBox.h);
+  addWhiteBox(pptx, slide, centerBox.x, centerBox.y, centerBox.w, centerBox.h);
+  addWhiteBox(pptx, slide, topRightBox.x, topRightBox.y, topRightBox.w, topRightBox.h);
+
+  if (settings.topLeftLogoEnabled) {
+    addLogoImage(pptx, slide, settings.topLeftLogoPath, topLeftBox);
+  }
+
+  if (settings.centerLogoEnabled) {
+    addLogoImage(pptx, slide, settings.centerLogoPath, centerBox);
+  }
+
+  if (settings.topRightLogoEnabled) {
+    addLogoImage(pptx, slide, settings.topRightLogoPath, topRightBox);
+  }
+}
 function addDynamicTitle(pptx, slide, title) {
   // This white box hides the template's old BEFORE/DURING/AFTER heading.
   // It keeps the logos safe and only replaces the center heading area.
@@ -397,10 +464,13 @@ slideGroups.forEach((group, groupIndex) => {
   const pageNumber = groupIndex + 1;
   const slide = pptx.addSlide();
 
-  addTemplateBackground(pptx, slide);
+addTemplateBackground(pptx, slide);
 
-  // Hide old template photo labels first.
-  hidePhotoPlaceholderArea(pptx, slide);
+// Replace template logos with admin-uploaded logos.
+addPptLogos(pptx, slide, pptSettings);
+
+// Hide old template photo labels first.
+hidePhotoPlaceholderArea(pptx, slide);
 
   // Show only one heading: BEFORE / DURING / AFTER / PROGRESS.
   addDynamicTitle(pptx, slide, group.title);
