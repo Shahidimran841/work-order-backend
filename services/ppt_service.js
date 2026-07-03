@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+const sharp = require("sharp");
 const pptxgen = require("pptxgenjs");
 const {
   getStorageDir,
@@ -11,6 +13,9 @@ const { getPptSettings } = require("./app_settings_service");
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
+const MAX_IMAGE_WIDTH = 1600;
+const MAX_IMAGE_HEIGHT = 1000;
+const IMAGE_QUALITY = 72;
 
 const imageSizePackage = require("image-size");
 
@@ -209,58 +214,34 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
 }
 
 function getSlotsForPhotoCount(count) {
-  // 1 photo = centered, decent width, not too wide
+  // Equal page division according to number of photos on slide.
+  // 1 photo = full width
   // 2 photos = 50 / 50
-  // 3 photos = 3 equal columns
+  // 3 photos = 3 equal parts
 
-  if (count === 1) {
-    return [
-      {
-        x: 3.0,
-        y: 2.72,
-        w: 7.3,
-        h: 3.65,
-      },
-    ];
+  const photoArea = {
+    x: 0.55,
+    y: 2.65,
+    w: 12.25,
+    h: 3.85,
+  };
+
+  const gap = 0.18;
+  const safeCount = Math.max(1, Math.min(count, 3));
+  const slotWidth = (photoArea.w - gap * (safeCount - 1)) / safeCount;
+
+  const slots = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    slots.push({
+      x: photoArea.x + i * (slotWidth + gap),
+      y: photoArea.y,
+      w: slotWidth,
+      h: photoArea.h,
+    });
   }
 
-  if (count === 2) {
-    return [
-      {
-        x: 0.85,
-        y: 2.72,
-        w: 5.55,
-        h: 3.65,
-      },
-      {
-        x: 6.95,
-        y: 2.72,
-        w: 5.55,
-        h: 3.65,
-      },
-    ];
-  }
-
-  return [
-    {
-      x: 0.55,
-      y: 2.72,
-      w: 3.85,
-      h: 3.65,
-    },
-    {
-      x: 4.75,
-      y: 2.72,
-      w: 3.85,
-      h: 3.65,
-    },
-    {
-      x: 8.95,
-      y: 2.72,
-      w: 3.85,
-      h: 3.65,
-    },
-  ];
+  return slots;
 }
 function getContainPosition(imagePath, boxX, boxY, boxW, boxH) {
   try {
@@ -310,7 +291,80 @@ function hidePhotoPlaceholderArea(pptx, slide) {
     line: { color: "FFFFFF" },
   });
 }
-function addPhotoToSlot(pptx, slide, photo, slot, photoNumber) {
+function ensureOptimizedImagesFolder(workOrderId) {
+  return getStorageDir(
+    "uploads",
+    "reports",
+    String(workOrderId),
+    "optimized-images"
+  );
+}
+
+function getImageCacheKey(imagePath) {
+  const stats = fs.statSync(imagePath);
+
+  return crypto
+    .createHash("md5")
+    .update(`${imagePath}-${stats.size}-${stats.mtimeMs}`)
+    .digest("hex");
+}
+
+async function getOptimizedImagePath(originalImagePath, workOrderId, photoId) {
+  try {
+    if (!fs.existsSync(originalImagePath)) {
+      return originalImagePath;
+    }
+
+    const optimizedDir = ensureOptimizedImagesFolder(workOrderId);
+    const cacheKey = getImageCacheKey(originalImagePath);
+    const optimizedPath = path.join(
+      optimizedDir,
+      `${photoId || "photo"}-${cacheKey}.jpg`
+    );
+
+    if (fs.existsSync(optimizedPath)) {
+      return optimizedPath;
+    }
+
+    await sharp(originalImagePath)
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_WIDTH,
+        height: MAX_IMAGE_HEIGHT,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({
+        quality: IMAGE_QUALITY,
+        mozjpeg: true,
+      })
+      .toFile(optimizedPath);
+
+    return optimizedPath;
+  } catch (error) {
+    console.log("Image optimization skipped:", error.message);
+    return originalImagePath;
+  }
+}
+
+function deleteOldPptFiles(workOrderId) {
+  const reportsDir = ensureReportsFolder(workOrderId);
+
+  if (!fs.existsSync(reportsDir)) {
+    return;
+  }
+
+  const files = fs.readdirSync(reportsDir);
+
+  for (const file of files) {
+    if (file.toLowerCase().endsWith(".pptx")) {
+      try {
+        fs.unlinkSync(path.join(reportsDir, file));
+      } catch (_) {}
+    }
+  }
+}
+async function addPhotoToSlot(pptx, slide, photo, slot, photoNumber, workOrderId) {
   slide.addShape(pptx.ShapeType.rect, {
     x: slot.x,
     y: slot.y,
@@ -330,8 +384,14 @@ function addPhotoToSlot(pptx, slide, photo, slot, photoNumber) {
   };
 
   if (fs.existsSync(absoluteImagePath)) {
+    const optimizedImagePath = await getOptimizedImagePath(
+      absoluteImagePath,
+      workOrderId,
+      photo.id
+    );
+
     slide.addImage({
-      path: absoluteImagePath,
+      path: optimizedImagePath,
       x: imageBox.x,
       y: imageBox.y,
       w: imageBox.w,
@@ -394,15 +454,15 @@ function buildSlideGroups(photos) {
 
     for (let i = 0; i < stagePhotos.length; i += 3) {
       slideGroups.push({
-  stage,
-  title:
-    stage === "Other"
-      ? "PHOTOS"
-      : stage === "Progress"
-      ? "PROGRESS"
-      : stage.toUpperCase(),
-  photos: stagePhotos.slice(i, i + 3),
-});
+        stage,
+        title:
+          stage === "Other"
+            ? "PHOTOS"
+            : stage === "Progress"
+            ? "PROGRESS"
+            : stage.toUpperCase(),
+        photos: stagePhotos.slice(i, i + 3),
+      });
     }
   }
 
@@ -460,39 +520,41 @@ async function generatePptForWorkOrder(workOrderId) {
   pptx.author = "Work Order App";
   pptx.subject = `Work Order ${workOrder.work_order_number}`;
 
-slideGroups.forEach((group, groupIndex) => {
-  const pageNumber = groupIndex + 1;
-  const slide = pptx.addSlide();
+  for (let groupIndex = 0; groupIndex < slideGroups.length; groupIndex++) {
+    const group = slideGroups[groupIndex];
+    const pageNumber = groupIndex + 1;
+    const slide = pptx.addSlide();
 
-addTemplateBackground(pptx, slide);
+    addTemplateBackground(pptx, slide);
 
-// Replace template logos with admin-uploaded logos.
-addPptLogos(pptx, slide, pptSettings);
+    // Replace template logos with admin-uploaded logos.
+    addPptLogos(pptx, slide, pptSettings);
 
-// Hide old template photo labels first.
-hidePhotoPlaceholderArea(pptx, slide);
+    // Hide old template photo labels first.
+    hidePhotoPlaceholderArea(pptx, slide);
 
-  // Show only one heading: BEFORE / DURING / AFTER / PROGRESS.
-  addDynamicTitle(pptx, slide, group.title);
+    // Show only one heading: BEFORE / DURING / AFTER / PROGRESS.
+    addDynamicTitle(pptx, slide, group.title);
 
-  const slots = getSlotsForPhotoCount(group.photos.length);
+    const slots = getSlotsForPhotoCount(group.photos.length);
 
-  group.photos.forEach((photo, index) => {
-    addPhotoToSlot(
-      pptx,
-      slide,
-      photo,
-      slots[index],
-      index + 1
-    );
-  });
+    for (let index = 0; index < group.photos.length; index++) {
+      await addPhotoToSlot(
+        pptx,
+        slide,
+        group.photos[index],
+        slots[index],
+        index + 1,
+        workOrderId
+      );
+    }
 
-  // Footer comes at the end so it stays visible above any white cover.
-  addFooter(pptx, slide, workOrder, pageNumber, totalPages, pptSettings);
-});
+    // Footer comes at the end so it stays visible above any white cover.
+    addFooter(pptx, slide, workOrder, pageNumber, totalPages, pptSettings);
+  }
 
   const reportsDir = ensureReportsFolder(workOrderId);
-
+deleteOldPptFiles(workOrderId);
   const safeWorkOrder = String(workOrder.work_order_number || "work_order")
     .replace(/\s+/g, "_")
     .replace(/[\\/:*?"<>|]/g, "_");
@@ -500,8 +562,8 @@ hidePhotoPlaceholderArea(pptx, slide);
   const fileName = `${safeWorkOrder}_${Date.now()}.pptx`;
   const absolutePptPath = path.join(reportsDir, fileName);
   const relativePptPath = toPublicPath(
-  path.join("uploads", "reports", String(workOrderId), fileName)
-);
+    path.join("uploads", "reports", String(workOrderId), fileName)
+  );
 
   await pptx.writeFile({
     fileName: absolutePptPath,
