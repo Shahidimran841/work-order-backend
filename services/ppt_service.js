@@ -100,24 +100,24 @@ function addLogoImage(pptx, slide, logoPath, box) {
 
 function addPptLogos(pptx, slide, settings) {
   const topLeftBox = {
-    x: 0.35,
-    y: 0.18,
-    w: 2.2,
-    h: 0.8,
+    x: 0.25,
+    y: 0.04,
+    w: 2.75,
+    h: 1.08,
   };
 
   const centerBox = {
-    x: 5.3,
-    y: 0.12,
-    w: 2.75,
-    h: 0.9,
+    x: 4.95,
+    y: 0.02,
+    w: 3.45,
+    h: 1.12,
   };
 
   const topRightBox = {
-    x: 10.75,
-    y: 0.18,
-    w: 2.2,
-    h: 0.8,
+    x: 10.25,
+    y: 0.04,
+    w: 2.85,
+    h: 1.08,
   };
 
   addWhiteBox(pptx, slide, topLeftBox.x, topLeftBox.y, topLeftBox.w, topLeftBox.h);
@@ -137,16 +137,15 @@ function addPptLogos(pptx, slide, settings) {
   }
 }
 function addDynamicTitle(pptx, slide, title) {
-  // This white box hides the template's old BEFORE/DURING/AFTER heading.
-  // It keeps the logos safe and only replaces the center heading area.
-  addWhiteBox(pptx, slide, 3.3, 1.35, 6.8, 1.15);
+  // Hide old template heading area.
+  addWhiteBox(pptx, slide, 3.0, 1.05, 7.3, 0.95);
 
   slide.addText(title, {
-    x: 3.3,
-     y: 1.48,
-    w: 6.8,
+    x: 3.0,
+    y: 1.32,
+    w: 7.3,
     h: 0.45,
-    fontSize: 22,
+    fontSize: 24,
     bold: true,
     align: "center",
     color: "000000",
@@ -156,7 +155,7 @@ function addDynamicTitle(pptx, slide, title) {
 
 function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
   // Always hide old footer text from template, then draw only enabled fields.
-  addWhiteBox(pptx, slide, 0.25, 6.55, 12.85, 0.88);
+  addWhiteBox(pptx, slide, 0.25, 6.60, 12.85, 0.82);
 
   if (!settings.showFooter) {
     return;
@@ -165,7 +164,7 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
   if (settings.showProjectName) {
     slide.addText(`Project Name : ${settings.projectName || "-"}`, {
       x: 0.45,
-      y: 6.72,
+      y: 6.78,
       w: 4.7,
       h: 0.25,
       fontSize: 14,
@@ -177,7 +176,7 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
   if (settings.showProjectCode) {
     slide.addText(`Contract  / Project Code : ${settings.projectCode || "-"}`, {
       x: 0.45,
-      y: 7.02,
+      y: 7.08,
       w: 5.3,
       h: 0.25,
       fontSize: 14,
@@ -189,7 +188,7 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
   if (settings.showWorkOrderNumber) {
     slide.addText(`Work Order Number: ${safeText(workOrder.work_order_number)}`, {
       x: 4.9,
-      y: 6.88,
+      y: 6.95,
       w: 4.2,
       h: 0.3,
       fontSize: 14,
@@ -202,7 +201,7 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
   if (settings.showPageNumber) {
     slide.addText(`Page Number: ${pageNumber} of ${totalPages}`, {
       x: 9.85,
-      y: 6.88,
+      y: 6.95,
       w: 2.9,
       h: 0.3,
       fontSize: 14,
@@ -214,13 +213,18 @@ function addFooter(pptx, slide, workOrder, pageNumber, totalPages, settings) {
 }
 
 function getSlotsForPhotoCount(count) {
+  // 1 photo = centered
+  // 2 photos = 50 / 50
+  // 3 photos = 3 columns
+  // Photos moved slightly upward and made bigger.
+
   if (count === 1) {
     return [
       {
-        x: 3.0,
-        y: 2.48,
-        w: 7.3,
-        h: 3.65,
+        x: 2.8,
+        y: 2.32,
+        w: 7.7,
+        h: 3.95,
       },
     ];
   }
@@ -228,38 +232,38 @@ function getSlotsForPhotoCount(count) {
   if (count === 2) {
     return [
       {
-        x: 0.85,
-        y: 2.48,
-        w: 5.55,
-        h: 3.65,
+        x: 0.75,
+        y: 2.32,
+        w: 5.7,
+        h: 3.95,
       },
       {
-        x: 6.95,
-        y: 2.48,
-        w: 5.55,
-        h: 3.65,
+        x: 6.85,
+        y: 2.32,
+        w: 5.7,
+        h: 3.95,
       },
     ];
   }
 
   return [
     {
-      x: 0.55,
-      y: 2.48,
-      w: 3.85,
-      h: 3.65,
+      x: 0.45,
+      y: 2.32,
+      w: 3.95,
+      h: 3.95,
     },
     {
-      x: 4.75,
-      y: 2.48,
-      w: 3.85,
-      h: 3.65,
+      x: 4.7,
+      y: 2.32,
+      w: 3.95,
+      h: 3.95,
     },
     {
       x: 8.95,
-      y: 2.48,
-      w: 3.85,
-      h: 3.65,
+      y: 2.32,
+      w: 3.95,
+      h: 3.95,
     },
   ];
 }
@@ -300,11 +304,12 @@ function getContainPosition(imagePath, boxX, boxY, boxW, boxH) {
   }
 }
 function hidePhotoPlaceholderArea(pptx, slide) {
+  // Hides old Picture 1 / Picture 2 / Picture 3 template labels.
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.35,
-    y: 2.25,
+    y: 2.15,
     w: 12.65,
-    h: 4.32,
+    h: 4.42,
     fill: { color: "FFFFFF" },
     line: { color: "FFFFFF" },
   });
@@ -398,7 +403,7 @@ async function addPhotoToSlot(pptx, slide, photo, slot, photoNumber, workOrderId
     x: slot.x + 0.08,
     y: slot.y + 0.08,
     w: slot.w - 0.16,
-    h: slot.h - 0.45,
+    h: slot.h - 0.16,
   };
 
   if (fs.existsSync(absoluteImagePath)) {
@@ -435,16 +440,7 @@ async function addPhotoToSlot(pptx, slide, photo, slot, photoNumber, workOrderId
     });
   }
 
-  slide.addText(`Picture ${photoNumber}`, {
-    x: slot.x,
-    y: slot.y + slot.h - 0.28,
-    w: slot.w,
-    h: 0.22,
-    fontSize: 10,
-    color: "000000",
-    align: "center",
-    margin: 0,
-  });
+
 }
 function groupPhotosByStage(photos) {
   return {
