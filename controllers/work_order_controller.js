@@ -4,7 +4,10 @@ const {
   getStorageDir,
   toPublicPath,
 } = require("../services/storage_service");
-const { getDatabase } = require("../database/db");
+const {
+  getDatabase,
+  withTransaction,
+} = require("../database/db");
 
 function getPublicFileUrl(filePath) {
   const normalizedPath = filePath.replace(/\\/g, "/");
@@ -85,12 +88,11 @@ async function moveFileToOrganizedFolder({
 }
 async function uploadWorkOrder(req, res) {
   const db = getDatabase();
+  const files = req.files || [];
 
   try {
     console.log("UPLOAD API HIT");
-    console.log("User:", req.user);
-    console.log("Body:", req.body);
-    console.log("Files:", req.files ? req.files.length : 0);
+    console.log("Files:", files.length);
 
     const {
       localId,
@@ -102,117 +104,153 @@ async function uploadWorkOrder(req, res) {
     } = req.body;
 
     if (!workOrderNumber) {
+      cleanupUploadedTempFiles(files);
+
       return res.status(400).json({
         success: false,
         message: "Work order number is required",
       });
     }
 
-    const technicianId = req.user ? req.user.id : null;
-    const files = req.files || [];
-    const parsedMetadata = metadata ? JSON.parse(metadata) : {};
-    if (localId) {
-  const existingWorkOrder = await db.get(
-    `
-    SELECT id
-    FROM work_orders
-    WHERE technician_id = ?
-      AND local_id = ?
-    `,
-    [technicianId, localId]
-  );
+    const technicianId = req.user?.id || null;
 
-  if (existingWorkOrder) {
-    cleanupUploadedTempFiles(files);
+    if (!technicianId) {
+      cleanupUploadedTempFiles(files);
 
-    return res.status(200).json({
-      success: true,
-      message: "Work order already uploaded. Duplicate upload ignored.",
-      serverWorkOrderId: existingWorkOrder.id,
-      duplicate: true,
-      pptStatus: "not_generated",
-    });
-  }
-}
-
-    await db.run("BEGIN TRANSACTION");
-
-    const workOrderResult = await db.run(
-      `
-      INSERT INTO work_orders (
-        local_id,
-        work_order_number,
-        asset_id,
-        notes,
-        technician_id,
-        status,
-        submitted_at,
-        received_at,
-        metadata_json,
-        ppt_status
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        localId || "",
-        workOrderNumber,
-        assetId || "",
-        notes || "",
-        technicianId,
-        "uploaded",
-        submittedAt || new Date().toISOString(),
-        new Date().toISOString(),
-        JSON.stringify(parsedMetadata),
-        "not_generated",
-      ]
-    );
-
-    const workOrderId = workOrderResult.lastID;
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-
-      const stage = req.body[`photo_${i}_stage`] || "Unknown";
-
-      const relativePath = await moveFileToOrganizedFolder({
-        file,
-        technicianId,
-        workOrderNumber,
-        stage,
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
       });
+    }
 
-      await db.run(
+    let parsedMetadata = {};
+
+    try {
+      parsedMetadata = metadata
+        ? JSON.parse(metadata)
+        : {};
+    } catch (error) {
+      cleanupUploadedTempFiles(files);
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid work order metadata",
+      });
+    }
+
+    /*
+     * Check for an earlier successful upload using the same
+     * local mobile work-order ID.
+     */
+    if (localId) {
+      const existingWorkOrder = await db.get(
         `
-        INSERT INTO work_order_photos (
-          work_order_id,
-          stage,
-          captured_time,
-          display_time,
-          latitude,
-          longitude,
-          original_name,
-          file_name,
-          file_path,
-          uploaded_at
+        SELECT id
+        FROM work_orders
+        WHERE technician_id = ?
+          AND local_id = ?
+        `,
+        [technicianId, localId]
+      );
+
+      if (existingWorkOrder) {
+        cleanupUploadedTempFiles(files);
+
+        return res.status(200).json({
+          success: true,
+          message:
+            "Work order already uploaded. Duplicate upload ignored.",
+          serverWorkOrderId: existingWorkOrder.id,
+          duplicate: true,
+          pptStatus: "not_generated",
+        });
+      }
+    }
+
+    let workOrderId;
+
+    /*
+     * PostgreSQL transaction.
+     * Every database write inside this callback must use tx.
+     */
+    await withTransaction(async (tx) => {
+      const workOrderResult = await tx.run(
+        `
+        INSERT INTO work_orders (
+          local_id,
+          work_order_number,
+          asset_id,
+          notes,
+          technician_id,
+          status,
+          submitted_at,
+          received_at,
+          metadata_json,
+          ppt_status
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
-          workOrderId,
-          stage,
-          req.body[`photo_${i}_time`] || "",
-          req.body[`photo_${i}_displayTime`] || "",
-          req.body[`photo_${i}_latitude`] || "",
-          req.body[`photo_${i}_longitude`] || "",
-          file.originalname,
-          file.filename,
-          relativePath,
+          localId || "",
+          workOrderNumber,
+          assetId || "",
+          notes || "",
+          technicianId,
+          "uploaded",
+          submittedAt || new Date().toISOString(),
           new Date().toISOString(),
+          JSON.stringify(parsedMetadata),
+          "not_generated",
         ]
       );
-    }
 
-    await db.run("COMMIT");
+      workOrderId = workOrderResult.lastID;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+
+        const stage =
+          req.body[`photo_${i}_stage`] || "Unknown";
+
+        const relativePath =
+          await moveFileToOrganizedFolder({
+            file,
+            technicianId,
+            workOrderNumber,
+            stage,
+          });
+
+        await tx.run(
+          `
+          INSERT INTO work_order_photos (
+            work_order_id,
+            stage,
+            captured_time,
+            display_time,
+            latitude,
+            longitude,
+            original_name,
+            file_name,
+            file_path,
+            uploaded_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            workOrderId,
+            stage,
+            req.body[`photo_${i}_time`] || "",
+            req.body[`photo_${i}_displayTime`] || "",
+            req.body[`photo_${i}_latitude`] || "",
+            req.body[`photo_${i}_longitude`] || "",
+            file.originalname,
+            file.filename,
+            relativePath,
+            new Date().toISOString(),
+          ]
+        );
+      }
+    });
 
     return res.status(201).json({
       success: true,
@@ -221,19 +259,21 @@ async function uploadWorkOrder(req, res) {
       photoCount: files.length,
       pptStatus: "not_generated",
     });
-    } catch (error) {
-    await db.run("ROLLBACK").catch(() => {});
-
-    cleanupUploadedTempFiles(req.files || []);
+  } catch (error) {
+    cleanupUploadedTempFiles(files);
 
     console.error("Upload work order error:", error);
 
+    /*
+     * PostgreSQL unique-constraint code is 23505.
+     * This protects against two simultaneous retries.
+     */
     if (
-      error.message &&
-      error.message.toLowerCase().includes("unique")
+      error.code === "23505" ||
+      String(error.message || "")
+        .toLowerCase()
+        .includes("unique")
     ) {
-      const db = getDatabase();
-
       const existingWorkOrder = await db.get(
         `
         SELECT id
@@ -241,13 +281,17 @@ async function uploadWorkOrder(req, res) {
         WHERE technician_id = ?
           AND local_id = ?
         `,
-        [req.user?.id || null, req.body.localId || ""]
+        [
+          req.user?.id || null,
+          req.body.localId || "",
+        ]
       );
 
       if (existingWorkOrder) {
         return res.status(200).json({
           success: true,
-          message: "Work order already uploaded. Duplicate upload ignored.",
+          message:
+            "Work order already uploaded. Duplicate upload ignored.",
           serverWorkOrderId: existingWorkOrder.id,
           duplicate: true,
           pptStatus: "not_generated",
@@ -258,7 +302,6 @@ async function uploadWorkOrder(req, res) {
     return res.status(500).json({
       success: false,
       message: "Work order upload failed",
-      error: error.message,
     });
   }
 }
@@ -339,96 +382,102 @@ async function addPhotosToExistingWorkOrder(req, res) {
 
     const parsedMetadata = metadata ? JSON.parse(metadata) : {};
 
-    await db.run("BEGIN TRANSACTION");
+    const editedAt = new Date().toISOString();
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const stage = req.body[`photo_${i}_stage`] || "Unknown";
+await withTransaction(async (tx) => {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
 
-      const relativePath = await moveFileToOrganizedFolder({
+    const stage =
+      req.body[`photo_${i}_stage`] || "Unknown";
+
+    const relativePath =
+      await moveFileToOrganizedFolder({
         file,
         technicianId,
-        workOrderNumber: workOrder.work_order_number,
+        workOrderNumber:
+          workOrder.work_order_number,
         stage,
       });
 
-      await db.run(
-        `
-        INSERT INTO work_order_photos (
-          work_order_id,
-          stage,
-          captured_time,
-          display_time,
-          latitude,
-          longitude,
-          original_name,
-          file_name,
-          file_path,
-          uploaded_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          workOrder.id,
-          stage,
-          req.body[`photo_${i}_time`] || "",
-          req.body[`photo_${i}_displayTime`] || "",
-          req.body[`photo_${i}_latitude`] || "",
-          req.body[`photo_${i}_longitude`] || "",
-          file.originalname,
-          file.filename,
-          relativePath,
-          new Date().toISOString(),
-        ]
-      );
-    }
-
-    const editedAt = new Date().toISOString();
-
-await db.run(
-  `
-  UPDATE work_orders
-  SET notes = ?,
-      submitted_at = ?,
-      metadata_json = ?,
-      ppt_status = ?,
-      ppt_file_path = ?,
-      email_status = ?,
-      email_sent_at = ?,
-      email_error = ?,
-      is_edited = ?,
-      edited_at = ?,
-      edit_count = COALESCE(edit_count, 0) + 1,
-      last_added_photo_count = ?
-  WHERE id = ?
-  `,
-  [
-    notes || workOrder.notes || "",
-    submittedAt || editedAt,
-    JSON.stringify(parsedMetadata),
-    "needs_regeneration",
-    "",
-    "not_sent",
-    null,
-    "",
-    1,
-    editedAt,
-    files.length,
-    workOrder.id,
-  ]
-);
-
-    await db.run(
+    await tx.run(
       `
-      UPDATE ppt_reports
-      SET status = ?,
-          error_message = ?
-      WHERE work_order_id = ?
+      INSERT INTO work_order_photos (
+        work_order_id,
+        stage,
+        captured_time,
+        display_time,
+        latitude,
+        longitude,
+        original_name,
+        file_name,
+        file_path,
+        uploaded_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      ["outdated_after_photo_update", "", workOrder.id]
+      [
+        workOrder.id,
+        stage,
+        req.body[`photo_${i}_time`] || "",
+        req.body[`photo_${i}_displayTime`] || "",
+        req.body[`photo_${i}_latitude`] || "",
+        req.body[`photo_${i}_longitude`] || "",
+        file.originalname,
+        file.filename,
+        relativePath,
+        new Date().toISOString(),
+      ]
     );
+  }
 
-    await db.run("COMMIT");
+  await tx.run(
+    `
+    UPDATE work_orders
+    SET notes = ?,
+        submitted_at = ?,
+        metadata_json = ?,
+        ppt_status = ?,
+        ppt_file_path = ?,
+        email_status = ?,
+        email_sent_at = ?,
+        email_error = ?,
+        is_edited = ?,
+        edited_at = ?,
+        edit_count = COALESCE(edit_count, 0) + 1,
+        last_added_photo_count = ?
+    WHERE id = ?
+    `,
+    [
+      notes || workOrder.notes || "",
+      submittedAt || editedAt,
+      JSON.stringify(parsedMetadata),
+      "needs_regeneration",
+      "",
+      "not_sent",
+      null,
+      "",
+      1,
+      editedAt,
+      files.length,
+      workOrder.id,
+    ]
+  );
+
+  await tx.run(
+    `
+    UPDATE ppt_reports
+    SET status = ?,
+        error_message = ?
+    WHERE work_order_id = ?
+    `,
+    [
+      "outdated_after_photo_update",
+      "",
+      workOrder.id,
+    ]
+  );
+});
 
     const totalPhotos = await db.get(
       `
@@ -450,7 +499,6 @@ await db.run(
   editedAt,
 });
   } catch (error) {
-    await db.run("ROLLBACK").catch(() => {});
 
     cleanupUploadedTempFiles(req.files || []);
 
@@ -501,17 +549,21 @@ async function getAllWorkOrders(req, res) {
     const db = getDatabase();
 
     const workOrders = await db.all(`
-      SELECT
-        wo.*,
-        u.full_name AS technician_name,
-        u.phone AS technician_phone,
-        COUNT(wop.id) AS photo_count
-      FROM work_orders wo
-      LEFT JOIN users u ON wo.technician_id = u.id
-      LEFT JOIN work_order_photos wop ON wo.id = wop.work_order_id
-      GROUP BY wo.id
-      ORDER BY wo.id DESC
-    `);
+  SELECT
+    wo.*,
+    u.full_name AS technician_name,
+    u.phone AS technician_phone,
+    COUNT(wop.id) AS photo_count
+  FROM work_orders wo
+  LEFT JOIN users u ON wo.technician_id = u.id
+  LEFT JOIN work_order_photos wop ON wo.id = wop.work_order_id
+  GROUP BY
+    wo.id,
+    u.id,
+    u.full_name,
+    u.phone
+  ORDER BY wo.id DESC
+`);
 
     return res.json({
       success: true,

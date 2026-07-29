@@ -138,18 +138,22 @@ async function dashboard(req, res) {
   );
 
   const recentWorkOrders = await db.all(`
-    SELECT
-      wo.*,
-      u.full_name AS technician_name,
-      u.phone AS technician_phone,
-      COUNT(wop.id) AS photo_count
-    FROM work_orders wo
-    LEFT JOIN users u ON wo.technician_id = u.id
-    LEFT JOIN work_order_photos wop ON wo.id = wop.work_order_id
-    GROUP BY wo.id
-    ORDER BY wo.id DESC
-    LIMIT 10
-  `);
+  SELECT
+    wo.*,
+    u.full_name AS technician_name,
+    u.phone AS technician_phone,
+    COUNT(wop.id) AS photo_count
+  FROM work_orders wo
+  LEFT JOIN users u ON wo.technician_id = u.id
+  LEFT JOIN work_order_photos wop ON wo.id = wop.work_order_id
+  GROUP BY
+    wo.id,
+    u.id,
+    u.full_name,
+    u.phone
+  ORDER BY wo.id DESC
+  LIMIT 10
+`);
 
   return res.render("admin/dashboard", {
     admin: req.session.adminUser,
@@ -250,14 +254,18 @@ async function workOrdersPage(req, res) {
   }
 
   if (search) {
-    sql += " AND (wo.work_order_number LIKE ? OR wo.asset_id LIKE ?)";
+    sql += " AND (wo.work_order_number ILIKE ? OR wo.asset_id ILIKE ?)";
     params.push(`%${search}%`, `%${search}%`);
   }
 
   sql += `
-    GROUP BY wo.id
-    ORDER BY wo.id DESC
-  `;
+  GROUP BY
+    wo.id,
+    u.id,
+    u.full_name,
+    u.phone
+  ORDER BY wo.id DESC
+`;
 
   const workOrders = await db.all(sql, params);
 
