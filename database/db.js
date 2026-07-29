@@ -1,244 +1,226 @@
+const fs = require("fs");
+const path = require("path");
 const bcrypt = require("bcryptjs");
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
-const { getStoragePath } = require("../services/storage_service");
+const { Pool, types } = require("pg");
 
-let db;
+// PostgreSQL COUNT(*) is int8. Convert safe application-sized counts to numbers.
+types.setTypeParser(20, (value) => Number.parseInt(value, 10));
 
-async function initDatabase() {
-  db = await open({
-    filename: getStoragePath("database", "work_order_app.sqlite"),
-    driver: sqlite3.Database,
+let pool;
+let database;
+
+function normalizeParams(params) {
+  if (params === undefined || params === null) {
+    return [];
+  }
+
+  return Array.isArray(params) ? params : [params];
+}
+
+function convertQuestionMarkPlaceholders(sql) {
+  let parameterIndex = 0;
+
+  return String(sql).replace(/\?/g, () => {
+    parameterIndex += 1;
+    return `$${parameterIndex}`;
   });
+}
 
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      full_name TEXT NOT NULL,
-      qid_number TEXT,
-      job_title TEXT,
-      phone TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'technician',
-      status TEXT NOT NULL DEFAULT 'pending',
-      created_at TEXT NOT NULL
-    );
+function addReturningIdToInsert(sql) {
+  const trimmedSql = String(sql).trim().replace(/;\s*$/, "");
 
-    CREATE TABLE IF NOT EXISTS work_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      local_id TEXT,
-      work_order_number TEXT NOT NULL,
-      asset_id TEXT,
-      notes TEXT,
-      technician_id INTEGER,
-      status TEXT NOT NULL DEFAULT 'received',
-      submitted_at TEXT,
-      received_at TEXT NOT NULL,
-      metadata_json TEXT,
-      ppt_status TEXT DEFAULT 'not_generated',
-      ppt_file_path TEXT,
-      email_status TEXT DEFAULT 'not_sent',
-      email_sent_at TEXT,
-      email_error TEXT,
-      is_edited INTEGER DEFAULT 0,
-      edited_at TEXT,
-      edit_count INTEGER DEFAULT 0,
-      last_added_photo_count INTEGER DEFAULT 0,
-      FOREIGN KEY (technician_id) REFERENCES users(id)
-    );
+  if (
+    /^INSERT\s+INTO\b/i.test(trimmedSql) &&
+    !/\bRETURNING\b/i.test(trimmedSql)
+  ) {
+    return `${trimmedSql} RETURNING id`;
+  }
 
-    CREATE TABLE IF NOT EXISTS work_order_photos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      work_order_id INTEGER NOT NULL,
-      stage TEXT NOT NULL,
-      captured_time TEXT,
-      display_time TEXT,
-      latitude TEXT,
-      longitude TEXT,
-      original_name TEXT,
-      file_name TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      uploaded_at TEXT NOT NULL,
-      FOREIGN KEY (work_order_id) REFERENCES work_orders(id)
-    );
+  return trimmedSql;
+}
 
-    CREATE TABLE IF NOT EXISTS email_recipients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      email TEXT NOT NULL UNIQUE,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS ppt_reports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      work_order_id INTEGER NOT NULL,
-      ppt_path TEXT,
-      status TEXT NOT NULL DEFAULT 'not_generated',
-      generated_at TEXT,
-      emailed_at TEXT,
-      error_message TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (work_order_id) REFERENCES work_orders(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      action TEXT NOT NULL,
-      details TEXT,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS app_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      setting_key TEXT NOT NULL UNIQUE,
-      setting_value TEXT,
-      updated_at TEXT
-    );
-  `);
-
-  await ensureColumn("email_recipients", "name", "TEXT");
-
-  await ensureColumn("work_orders", "ppt_file_path", "TEXT");
-  await ensureColumn("work_orders", "ppt_status", "TEXT DEFAULT 'not_generated'");
-  await ensureColumn("work_orders", "email_status", "TEXT DEFAULT 'not_sent'");
-  await ensureColumn("work_orders", "email_sent_at", "TEXT");
-  await ensureColumn("work_orders", "email_error", "TEXT");
-
-  await ensureColumn("work_orders", "is_edited", "INTEGER DEFAULT 0");
-  await ensureColumn("work_orders", "edited_at", "TEXT");
-  await ensureColumn("work_orders", "edit_count", "INTEGER DEFAULT 0");
-  await ensureColumn(
-    "work_orders",
-    "last_added_photo_count",
-    "INTEGER DEFAULT 0"
-  );
-
-  await ensureColumn("users", "reset_otp_hash", "TEXT");
-  await ensureColumn("users", "reset_otp_expires_at", "TEXT");
-  await ensureColumn("users", "reset_otp_attempts", "INTEGER DEFAULT 0");
-
-  try {
-    // Clean old duplicate work orders before creating unique index.
-    // Keep the first uploaded record and remove later duplicates.
-    await db.exec(`
-      DELETE FROM work_order_photos
-      WHERE work_order_id IN (
-        SELECT id
-        FROM work_orders
-        WHERE local_id IS NOT NULL
-          AND local_id != ''
-          AND id NOT IN (
-            SELECT MIN(id)
-            FROM work_orders
-            WHERE local_id IS NOT NULL
-              AND local_id != ''
-            GROUP BY technician_id, local_id
-          )
+function createDatabaseAdapter(queryable) {
+  return {
+    async get(sql, params) {
+      const result = await queryable.query(
+        convertQuestionMarkPlaceholders(sql),
+        normalizeParams(params)
       );
 
-      DELETE FROM ppt_reports
-      WHERE work_order_id IN (
-        SELECT id
-        FROM work_orders
-        WHERE local_id IS NOT NULL
-          AND local_id != ''
-          AND id NOT IN (
-            SELECT MIN(id)
-            FROM work_orders
-            WHERE local_id IS NOT NULL
-              AND local_id != ''
-            GROUP BY technician_id, local_id
-          )
+      return result.rows[0];
+    },
+
+    async all(sql, params) {
+      const result = await queryable.query(
+        convertQuestionMarkPlaceholders(sql),
+        normalizeParams(params)
       );
 
-      DELETE FROM work_orders
-      WHERE local_id IS NOT NULL
-        AND local_id != ''
-        AND id NOT IN (
-          SELECT MIN(id)
-          FROM work_orders
-          WHERE local_id IS NOT NULL
-            AND local_id != ''
-          GROUP BY technician_id, local_id
+      return result.rows;
+    },
+
+    async run(sql, params) {
+      const normalizedSql = String(sql).trim();
+
+      if (/^(BEGIN|COMMIT|ROLLBACK)\b/i.test(normalizedSql)) {
+        throw new Error(
+          "Direct transaction commands are disabled. Use withTransaction()."
         );
+      }
 
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_work_order_local_upload
-      ON work_orders (technician_id, local_id)
-      WHERE local_id IS NOT NULL AND local_id != '';
-    `);
-  } catch (error) {
-    console.log(
-      "Duplicate work order cleanup/index setup skipped:",
-      error.message
+      const queryText = addReturningIdToInsert(
+        convertQuestionMarkPlaceholders(sql)
+      );
+
+      const result = await queryable.query(
+        queryText,
+        normalizeParams(params)
+      );
+
+      return {
+        lastID: result.rows[0] ? result.rows[0].id : null,
+        changes: result.rowCount,
+      };
+    },
+
+    async exec(sql) {
+      return queryable.query(sql);
+    },
+  };
+}
+
+async function ensureAdmin() {
+  const adminPhone = process.env.ADMIN_PHONE;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPhone || !adminPassword) {
+    throw new Error(
+      "ADMIN_PHONE and ADMIN_PASSWORD are required. No default credentials are allowed."
     );
   }
 
-  const adminPhone = process.env.ADMIN_PHONE || "admin";
-  const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-
-  const existingAdmin = await db.get(
-    "SELECT * FROM users WHERE phone = ?",
+  const existingAdmin = await database.get(
+    "SELECT id FROM users WHERE phone = ?",
     adminPhone
   );
 
-  if (!existingAdmin) {
-    const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
-
-    await db.run(
-      `
-      INSERT INTO users (
-        full_name,
-        qid_number,
-        job_title,
-        phone,
-        password_hash,
-        role,
-        status,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "System Admin",
-        "",
-        "Administrator",
-        adminPhone,
-        adminPasswordHash,
-        "admin",
-        "approved",
-        new Date().toISOString(),
-      ]
-    );
-
-    console.log(`Default admin created. Phone: ${adminPhone}`);
+  if (existingAdmin) {
+    return;
   }
 
-  console.log("SQLite database initialized");
-  return db;
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+
+  await database.run(
+    `
+    INSERT INTO users (
+      full_name,
+      qid_number,
+      job_title,
+      phone,
+      password_hash,
+      role,
+      status,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      "System Admin",
+      "",
+      "Administrator",
+      adminPhone,
+      adminPasswordHash,
+      "admin",
+      "approved",
+      new Date().toISOString(),
+    ]
+  );
+
+  console.log(`Administrator created for configured phone: ${adminPhone}`);
+}
+
+async function initDatabase() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required.");
+  }
+
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.DATABASE_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : false,
+    max: Number(process.env.DB_POOL_MAX || 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    application_name: "work-order-backend",
+  });
+
+  pool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL pool error:", error);
+  });
+
+  await pool.query("SELECT 1");
+
+  const migrationPath = path.join(
+    __dirname,
+    "..",
+    "migrations",
+    "001_initial_schema.sql"
+  );
+
+  const migrationSql = fs.readFileSync(migrationPath, "utf8");
+  await pool.query(migrationSql);
+
+  database = createDatabaseAdapter(pool);
+  await ensureAdmin();
+
+  console.log("PostgreSQL database initialized");
+  return database;
 }
 
 function getDatabase() {
-  if (!db) {
+  if (!database) {
     throw new Error("Database not initialized");
   }
 
-  return db;
+  return database;
 }
 
-async function ensureColumn(tableName, columnName, columnDefinition) {
-  const columns = await db.all(`PRAGMA table_info(${tableName})`);
-  const exists = columns.some((column) => column.name === columnName);
+async function withTransaction(work) {
+  if (!pool) {
+    throw new Error("Database not initialized");
+  }
 
-  if (!exists) {
-    await db.run(
-      `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`
-    );
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const transactionDatabase = createDatabaseAdapter(client);
+    const result = await work(transactionDatabase);
+
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function closeDatabase() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+    database = null;
   }
 }
 
 module.exports = {
   initDatabase,
   getDatabase,
+  withTransaction,
+  closeDatabase,
 };
