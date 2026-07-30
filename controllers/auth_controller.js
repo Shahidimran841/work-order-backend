@@ -209,12 +209,15 @@ async function forgotPassword(req, res) {
 
     const user = await db.get("SELECT * FROM users WHERE phone = ?", phone);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "No account found with this phone number",
-      });
-    }
+    const genericResponse = {
+  success: true,
+  message:
+    "If an account exists for this phone number, a verification code has been sent.",
+};
+
+if (!user) {
+  return res.json(genericResponse);
+}
 
     const otp = createOtp();
     const otpHash = await bcrypt.hash(otp, 10);
@@ -231,13 +234,12 @@ async function forgotPassword(req, res) {
       [otpHash, otpExpiresAt, user.id]
     );
 
-    console.log(`Password reset OTP for ${phone}: ${otp}`);
 
     return res.json({
-      success: true,
-      message: "OTP generated. Development OTP returned for testing.",
-      devOtp: otp,
-    });
+  success: true,
+  message:
+    "If an account exists for this phone number, a verification code has been sent.",
+});
   } catch (error) {
     console.error("Forgot password error:", error);
 
