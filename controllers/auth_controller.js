@@ -1,6 +1,9 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { getDatabase } = require("../database/db");
+const {
+  getDatabase,
+  withTransaction,
+} = require("../database/db");
 
 const {
   normalizePhone,
@@ -115,7 +118,138 @@ async function register(req, res) {
     });
   }
 }
+async function deleteAccount(req, res) {
+  try {
+    const userId = req.user?.id;
+    const authenticatedRole = req.user?.role;
+    const { password } = req.body;
 
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (authenticatedRole === "admin") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Administrator accounts cannot be deleted from the mobile app",
+      });
+    }
+
+    if (!password || typeof password !== "string" || !password.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required to delete your account",
+      });
+    }
+
+    const db = getDatabase();
+
+    const user = await db.get(
+      `
+      SELECT id, password_hash, role
+      FROM users
+      WHERE id = ?
+      `,
+      userId
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found",
+      });
+    }
+
+    if (user.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Administrator accounts cannot be deleted from the mobile app",
+      });
+    }
+
+    const passwordMatched = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+
+    if (!passwordMatched) {
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect password",
+      });
+    }
+
+    await withTransaction(async (transactionDb) => {
+      const deletionResult = await transactionDb.run(
+        `
+        DELETE FROM users
+        WHERE id = ?
+          AND role <> 'admin'
+        `,
+        userId
+      );
+
+      console.log("Delete account database result:", {
+        userId,
+        changes: deletionResult.changes,
+      });
+
+      if (deletionResult.changes !== 1) {
+        throw new Error(
+          `Expected to delete one user but deleted ${deletionResult.changes}`
+        );
+      }
+    });
+
+    const remainingUser = await db.get(
+      `
+      SELECT id
+      FROM users
+      WHERE id = ?
+      `,
+      userId
+    );
+
+    if (remainingUser) {
+      console.error("Account still exists after deletion:", {
+        userId,
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: "Account deletion could not be verified",
+      });
+    }
+
+    if (req.session) {
+      req.session.destroy((sessionError) => {
+        if (sessionError) {
+          console.error(
+            "Failed to destroy deleted user's session:",
+            sessionError
+          );
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Your account has been permanently deleted",
+    });
+  } catch (error) {
+    console.error("Delete account error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete account",
+    });
+  }
+}
 async function login(req, res) {
   try {
     const phone = normalizePhone(req.body.phone);
@@ -356,4 +490,5 @@ module.exports = {
   login,
   forgotPassword,
   resetPassword,
+    deleteAccount,
 };
