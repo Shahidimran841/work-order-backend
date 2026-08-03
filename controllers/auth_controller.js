@@ -1,17 +1,21 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const {
-  getDatabase,
-  withTransaction,
-} = require("../database/db");
+const { getDatabase, withTransaction } = require("../database/db");
 
 const {
   normalizePhone,
+  toE164Phone,
+  fromE164Phone,
   isValidPhone,
   validatePassword,
   createOtp,
   getOtpExpiryDate,
 } = require("../services/auth_validation_service");
+
+const {
+  getFirebaseAuth,
+  verifyFirebasePhoneToken,
+} = require("../services/firebase_admin_service");
 
 function createToken(user) {
   return jwt.sign(
@@ -23,7 +27,7 @@ function createToken(user) {
     process.env.JWT_SECRET,
     {
       expiresIn: "30d",
-    }
+    },
   );
 }
 
@@ -60,7 +64,7 @@ async function register(req, res) {
 
     const existingUser = await db.get(
       "SELECT * FROM users WHERE phone = ?",
-      phone
+      phone,
     );
 
     if (existingUser) {
@@ -98,7 +102,7 @@ async function register(req, res) {
         "technician",
         status,
         new Date().toISOString(),
-      ]
+      ],
     );
 
     return res.status(201).json({
@@ -139,7 +143,11 @@ async function deleteAccount(req, res) {
       });
     }
 
-    if (!password || typeof password !== "string" || !password.trim()) {
+    if (
+      !password ||
+      typeof password !== "string" ||
+      !password.trim()
+    ) {
       return res.status(400).json({
         success: false,
         message: "Password is required to delete your account",
@@ -150,11 +158,11 @@ async function deleteAccount(req, res) {
 
     const user = await db.get(
       `
-      SELECT id, password_hash, role
+      SELECT id, password_hash, role, firebase_uid
       FROM users
       WHERE id = ?
       `,
-      userId
+      userId,
     );
 
     if (!user) {
@@ -174,7 +182,7 @@ async function deleteAccount(req, res) {
 
     const passwordMatched = await bcrypt.compare(
       password,
-      user.password_hash
+      user.password_hash,
     );
 
     if (!passwordMatched) {
@@ -184,6 +192,26 @@ async function deleteAccount(req, res) {
       });
     }
 
+    // Delete the Firebase identity first.
+    // If it was already removed, continue with PostgreSQL deletion.
+    if (user.firebase_uid) {
+      try {
+        await getFirebaseAuth().deleteUser(user.firebase_uid);
+
+        console.log("Firebase Authentication user deleted:", {
+          firebaseUid: user.firebase_uid,
+        });
+      } catch (firebaseError) {
+        if (firebaseError.code !== "auth/user-not-found") {
+          throw firebaseError;
+        }
+
+        console.log("Firebase Authentication user already absent:", {
+          firebaseUid: user.firebase_uid,
+        });
+      }
+    }
+
     await withTransaction(async (transactionDb) => {
       const deletionResult = await transactionDb.run(
         `
@@ -191,7 +219,7 @@ async function deleteAccount(req, res) {
         WHERE id = ?
           AND role <> 'admin'
         `,
-        userId
+        userId,
       );
 
       console.log("Delete account database result:", {
@@ -201,7 +229,7 @@ async function deleteAccount(req, res) {
 
       if (deletionResult.changes !== 1) {
         throw new Error(
-          `Expected to delete one user but deleted ${deletionResult.changes}`
+          `Expected to delete one user but deleted ${deletionResult.changes}`,
         );
       }
     });
@@ -212,18 +240,13 @@ async function deleteAccount(req, res) {
       FROM users
       WHERE id = ?
       `,
-      userId
+      userId,
     );
 
     if (remainingUser) {
-      console.error("Account still exists after deletion:", {
-        userId,
-      });
-
-      return res.status(500).json({
-        success: false,
-        message: "Account deletion could not be verified",
-      });
+      throw new Error(
+        "Account still exists after PostgreSQL deletion",
+      );
     }
 
     if (req.session) {
@@ -231,7 +254,7 @@ async function deleteAccount(req, res) {
         if (sessionError) {
           console.error(
             "Failed to destroy deleted user's session:",
-            sessionError
+            sessionError,
           );
         }
       });
@@ -265,7 +288,8 @@ async function login(req, res) {
     if (!isValidPhone(phone) && phone !== "admin") {
       return res.status(400).json({
         success: false,
-        message: "Invalid phone number. Please enter a valid 8-digit Qatar phone number.",
+        message:
+          "Invalid phone number. Please enter a valid 8-digit Qatar phone number.",
       });
     }
 
@@ -344,14 +368,14 @@ async function forgotPassword(req, res) {
     const user = await db.get("SELECT * FROM users WHERE phone = ?", phone);
 
     const genericResponse = {
-  success: true,
-  message:
-    "If an account exists for this phone number, a verification code has been sent.",
-};
+      success: true,
+      message:
+        "If an account exists for this phone number, a verification code has been sent.",
+    };
 
-if (!user) {
-  return res.json(genericResponse);
-}
+    if (!user) {
+      return res.json(genericResponse);
+    }
 
     const otp = createOtp();
     const otpHash = await bcrypt.hash(otp, 10);
@@ -365,15 +389,14 @@ if (!user) {
           reset_otp_attempts = 0
       WHERE id = ?
       `,
-      [otpHash, otpExpiresAt, user.id]
+      [otpHash, otpExpiresAt, user.id],
     );
 
-
     return res.json({
-  success: true,
-  message:
-    "If an account exists for this phone number, a verification code has been sent.",
-});
+      success: true,
+      message:
+        "If an account exists for this phone number, a verification code has been sent.",
+    });
   } catch (error) {
     console.error("Forgot password error:", error);
 
@@ -447,7 +470,7 @@ async function resetPassword(req, res) {
         SET reset_otp_attempts = reset_otp_attempts + 1
         WHERE id = ?
         `,
-        user.id
+        user.id,
       );
 
       return res.status(400).json({
@@ -467,7 +490,7 @@ async function resetPassword(req, res) {
           reset_otp_attempts = 0
       WHERE id = ?
       `,
-      [newPasswordHash, user.id]
+      [newPasswordHash, user.id],
     );
 
     return res.json({
@@ -484,11 +507,252 @@ async function resetPassword(req, res) {
     });
   }
 }
+async function registerWithPhone(req, res) {
+  try {
+    const { fullName, qidNumber, jobTitle, password, firebaseIdToken } =
+      req.body;
 
+    const phone = normalizePhone(req.body.phone);
+
+    if (!fullName || !phone || !password || !firebaseIdToken) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Full name, phone, password and phone verification are required",
+      });
+    }
+
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 8-digit Qatar phone number",
+      });
+    }
+
+    const passwordCheck = validatePassword(password);
+
+    if (!passwordCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        message: passwordCheck.errors.join(", "),
+      });
+    }
+
+    const { firebaseUid, phoneNumber: verifiedPhoneNumber } =
+      await verifyFirebasePhoneToken(firebaseIdToken);
+
+    const expectedFirebasePhone = toE164Phone(phone);
+
+    if (verifiedPhoneNumber !== expectedFirebasePhone) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "The verified phone number does not match the registration phone number",
+      });
+    }
+
+    const db = getDatabase();
+
+    const existingPhoneUser = await db.get(
+      `
+      SELECT id
+      FROM users
+      WHERE phone = ?
+      `,
+      phone,
+    );
+
+    if (existingPhoneUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Phone number already registered",
+      });
+    }
+
+    const existingFirebaseUser = await db.get(
+      `
+      SELECT id
+      FROM users
+      WHERE firebase_uid = ?
+      `,
+      firebaseUid,
+    );
+
+    if (existingFirebaseUser) {
+      return res.status(409).json({
+        success: false,
+        message: "This verified Firebase account is already registered",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const status =
+      process.env.AUTO_APPROVE_USERS === "true" ? "approved" : "pending";
+
+    await db.run(
+      `
+      INSERT INTO users (
+        full_name,
+        qid_number,
+        job_title,
+        phone,
+        password_hash,
+        role,
+        status,
+        created_at,
+        firebase_uid,
+        phone_verified_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        fullName.trim(),
+        qidNumber || "",
+        jobTitle || "",
+        phone,
+        passwordHash,
+        "technician",
+        status,
+        new Date().toISOString(),
+        firebaseUid,
+        new Date().toISOString(),
+      ],
+    );
+
+    return res.status(201).json({
+      success: true,
+      message:
+        status === "approved"
+          ? "Phone verified and registration completed. You can login now."
+          : "Phone verified and registration submitted. Admin approval is required.",
+    });
+  } catch (error) {
+    console.error("Firebase phone registration error:", error);
+
+    const statusCode =
+      Number(error.statusCode) ||
+      (String(error.code || "").startsWith("auth/") ? 401 : 500);
+
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode === 500 ? "Registration failed" : error.message,
+    });
+  }
+}
+async function resetPasswordWithPhone(req, res) {
+  try {
+    const { firebaseIdToken, newPassword } = req.body;
+
+    if (!firebaseIdToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone verification and new password are required",
+      });
+    }
+
+    const passwordCheck = validatePassword(newPassword);
+
+    if (!passwordCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        message: passwordCheck.errors.join(", "),
+      });
+    }
+
+    const { firebaseUid, phoneNumber: verifiedPhoneNumber } =
+      await verifyFirebasePhoneToken(firebaseIdToken);
+
+    const phone = fromE164Phone(verifiedPhoneNumber);
+
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "The verified Firebase phone number is not supported",
+      });
+    }
+
+    const db = getDatabase();
+
+    const user = await db.get(
+      `
+      SELECT id, role, firebase_uid
+      FROM users
+      WHERE phone = ?
+      `,
+      phone,
+    );
+
+    if (!user || user.role === "admin") {
+      return res.status(404).json({
+        success: false,
+        message:
+          "No technician account was found for this verified phone number",
+      });
+    }
+
+    const firebaseUidOwner = await db.get(
+      `
+      SELECT id
+      FROM users
+      WHERE firebase_uid = ?
+      `,
+      firebaseUid,
+    );
+
+    if (firebaseUidOwner && firebaseUidOwner.id !== user.id) {
+      return res.status(409).json({
+        success: false,
+        message: "This Firebase identity is linked to a different account",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await db.run(
+      `
+      UPDATE users
+      SET password_hash = ?,
+          firebase_uid = ?,
+          phone_verified_at = ?,
+          reset_otp_hash = NULL,
+          reset_otp_expires_at = NULL,
+          reset_otp_attempts = 0
+      WHERE id = ?
+      `,
+      [passwordHash, firebaseUid, new Date().toISOString(), user.id],
+    );
+
+    try {
+      await getFirebaseAuth().revokeRefreshTokens(firebaseUid);
+    } catch (revocationError) {
+      console.error("Firebase token revocation warning:", revocationError);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Password reset successful. Please login with your new password.",
+    });
+  } catch (error) {
+    console.error("Firebase password reset error:", error);
+
+    const statusCode =
+      Number(error.statusCode) ||
+      (String(error.code || "").startsWith("auth/") ? 401 : 500);
+
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode === 500 ? "Password reset failed" : error.message,
+    });
+  }
+}
 module.exports = {
   register,
+  registerWithPhone,
   login,
   forgotPassword,
   resetPassword,
-    deleteAccount,
+  resetPasswordWithPhone,
+  deleteAccount,
 };

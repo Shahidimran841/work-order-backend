@@ -4,12 +4,12 @@
   "description": "Work Order App Backend with Node.js, Express and PostgreSQL",
   "main": "server.js",
   "scripts": {
-  "dev": "nodemon server.js",
-  "start": "node server.js",
-  "db:migrate:sqlite": "node scripts/migrate_sqlite_to_postgres.js",
-  "db:verify:postgres": "node scripts/verify_postgres.js",
-  "db:reset-admin": "node scripts/reset_admin_password.js"
-},
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "db:migrate:sqlite": "node scripts/migrate_sqlite_to_postgres.js",
+    "db:verify:postgres": "node scripts/verify_postgres.js",
+    "db:reset-admin": "node scripts/reset_admin_password.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -22,6 +22,7 @@
     "ejs": "^6.0.1",
     "express": "^5.1.0",
     "express-session": "^1.19.0",
+    "firebase-admin": "^14.2.0",
     "image-size": "^2.0.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",

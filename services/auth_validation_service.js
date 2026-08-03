@@ -1,5 +1,7 @@
 function normalizePhone(phone) {
-  return String(phone || "").trim().replace(/\s+/g, "");
+  return String(phone || "")
+    .trim()
+    .replace(/\s+/g, "");
 }
 
 function toE164Phone(phone) {
@@ -17,7 +19,16 @@ function toE164Phone(phone) {
 
   return value;
 }
+function fromE164Phone(phone) {
+  const value = normalizePhone(phone);
 
+  // Firebase Qatar format: +974XXXXXXXX
+  if (/^\+974\d{8}$/.test(value)) {
+    return value.substring(4);
+  }
+
+  return value;
+}
 function isValidPhone(phone) {
   const value = normalizePhone(phone);
 
@@ -77,6 +88,7 @@ function getOtpExpiryDate() {
 module.exports = {
   normalizePhone,
   toE164Phone,
+  fromE164Phone,
   isValidPhone,
   validatePassword,
   createOtp,

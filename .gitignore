@@ -22,3 +22,7 @@ node_modules/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Firebase Admin credentials
+serviceAccount*.json
+*firebase-admin*.json
