@@ -256,12 +256,10 @@ app.use((req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 
-// Public account-deletion page
-app.get("/account-deletion", (req, res) => {
-  // Code pasted above
-});
+// Admin panel routes
+app.use("/admin", adminRoutes);
 
-// 404 handler must remain after the public route
+// 404 handler MUST be after all valid routes
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -269,10 +267,7 @@ app.use((req, res) => {
   });
 });
 
-
-
-app.use("/admin", adminRoutes);
-
+// Global error handler
 app.use((error, req, res, next) => {
   console.error("Global error:", error);
 
