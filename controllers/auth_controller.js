@@ -1,6 +1,13 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { getDatabase, withTransaction } = require("../database/db");
+const fs = require("fs");
+const path = require("path");
+
+const {
+  getStorageRoot,
+  getStoredFileAbsolutePath,
+} = require("../services/storage_service");
 
 const {
   normalizePhone,
@@ -138,16 +145,11 @@ async function deleteAccount(req, res) {
     if (authenticatedRole === "admin") {
       return res.status(403).json({
         success: false,
-        message:
-          "Administrator accounts cannot be deleted from the mobile app",
+        message: "Administrator accounts cannot be deleted from the mobile app",
       });
     }
 
-    if (
-      !password ||
-      typeof password !== "string" ||
-      !password.trim()
-    ) {
+    if (!password || typeof password !== "string" || !password.trim()) {
       return res.status(400).json({
         success: false,
         message: "Password is required to delete your account",
@@ -175,15 +177,11 @@ async function deleteAccount(req, res) {
     if (user.role === "admin") {
       return res.status(403).json({
         success: false,
-        message:
-          "Administrator accounts cannot be deleted from the mobile app",
+        message: "Administrator accounts cannot be deleted from the mobile app",
       });
     }
 
-    const passwordMatched = await bcrypt.compare(
-      password,
-      user.password_hash,
-    );
+    const passwordMatched = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatched) {
       return res.status(401).json({
@@ -192,8 +190,66 @@ async function deleteAccount(req, res) {
       });
     }
 
-    // Delete the Firebase identity first.
-    // If it was already removed, continue with PostgreSQL deletion.
+    // ----------------------------------------------------
+    // 1. Find all work orders belonging to this user
+    // ----------------------------------------------------
+
+    const workOrders = await db.all(
+      `
+      SELECT id, ppt_file_path
+      FROM work_orders
+      WHERE technician_id = ?
+      `,
+      userId,
+    );
+
+    const filePathsToDelete = new Set();
+    const reportFoldersToDelete = [];
+
+    for (const workOrder of workOrders) {
+      const photos = await db.all(
+        `
+        SELECT file_path
+        FROM work_order_photos
+        WHERE work_order_id = ?
+        `,
+        workOrder.id,
+      );
+
+      for (const photo of photos) {
+        if (photo.file_path) {
+          filePathsToDelete.add(photo.file_path);
+        }
+      }
+
+      if (workOrder.ppt_file_path) {
+        filePathsToDelete.add(workOrder.ppt_file_path);
+      }
+
+      const pptReports = await db.all(
+        `
+        SELECT ppt_path
+        FROM ppt_reports
+        WHERE work_order_id = ?
+        `,
+        workOrder.id,
+      );
+
+      for (const report of pptReports) {
+        if (report.ppt_path) {
+          filePathsToDelete.add(report.ppt_path);
+        }
+      }
+
+      reportFoldersToDelete.push(
+        path.join(getStorageRoot(), "uploads", "reports", String(workOrder.id)),
+      );
+    }
+
+    // ----------------------------------------------------
+    // 2. Delete Firebase Authentication identity
+    // ----------------------------------------------------
+
     if (user.firebase_uid) {
       try {
         await getFirebaseAuth().deleteUser(user.firebase_uid);
@@ -206,13 +262,77 @@ async function deleteAccount(req, res) {
           throw firebaseError;
         }
 
-        console.log("Firebase Authentication user already absent:", {
+        console.log("Firebase Authentication user was already absent:", {
           firebaseUid: user.firebase_uid,
         });
       }
     }
 
+    // ----------------------------------------------------
+    // 3. Delete stored photo/PPT files
+    // ----------------------------------------------------
+
+    for (const storedPath of filePathsToDelete) {
+      try {
+        const absolutePath = getStoredFileAbsolutePath(storedPath);
+
+        if (absolutePath && fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (fileError) {
+        console.error("Failed to delete account file:", storedPath, fileError);
+
+        throw fileError;
+      }
+    }
+
+    // Delete generated report folders
+    for (const reportFolder of reportFoldersToDelete) {
+      try {
+        if (fs.existsSync(reportFolder)) {
+          fs.rmSync(reportFolder, {
+            recursive: true,
+            force: true,
+          });
+        }
+      } catch (folderError) {
+        console.error(
+          "Failed to delete account report folder:",
+          reportFolder,
+          folderError,
+        );
+
+        throw folderError;
+      }
+    }
+
+    // ----------------------------------------------------
+    // 4. Delete database data inside one transaction
+    // ----------------------------------------------------
+
     await withTransaction(async (transactionDb) => {
+      // Deleting work_orders also deletes:
+      // work_order_photos and ppt_reports through ON DELETE CASCADE.
+      for (const workOrder of workOrders) {
+        await transactionDb.run(
+          `
+          DELETE FROM work_orders
+          WHERE id = ?
+            AND technician_id = ?
+          `,
+          [workOrder.id, userId],
+        );
+      }
+
+      // Activity logs have no FK cascade.
+      await transactionDb.run(
+        `
+        DELETE FROM activity_logs
+        WHERE user_id = ?
+        `,
+        userId,
+      );
+
       const deletionResult = await transactionDb.run(
         `
         DELETE FROM users
@@ -222,17 +342,16 @@ async function deleteAccount(req, res) {
         userId,
       );
 
-      console.log("Delete account database result:", {
-        userId,
-        changes: deletionResult.changes,
-      });
-
       if (deletionResult.changes !== 1) {
         throw new Error(
           `Expected to delete one user but deleted ${deletionResult.changes}`,
         );
       }
     });
+
+    // ----------------------------------------------------
+    // 5. Verify account no longer exists
+    // ----------------------------------------------------
 
     const remainingUser = await db.get(
       `
@@ -244,10 +363,26 @@ async function deleteAccount(req, res) {
     );
 
     if (remainingUser) {
-      throw new Error(
-        "Account still exists after PostgreSQL deletion",
-      );
+      throw new Error("Account still exists after PostgreSQL deletion");
     }
+
+    const remainingWorkOrders = await db.get(
+      `
+      SELECT id
+      FROM work_orders
+      WHERE technician_id = ?
+      LIMIT 1
+      `,
+      userId,
+    );
+
+    if (remainingWorkOrders) {
+      throw new Error("Work-order data still exists after account deletion");
+    }
+
+    // ----------------------------------------------------
+    // 6. Destroy session if one exists
+    // ----------------------------------------------------
 
     if (req.session) {
       req.session.destroy((sessionError) => {
@@ -260,9 +395,15 @@ async function deleteAccount(req, res) {
       });
     }
 
+    console.log("Complete account deletion successful:", {
+      userId,
+      deletedWorkOrders: workOrders.length,
+      deletedFiles: filePathsToDelete.size,
+    });
+
     return res.status(200).json({
       success: true,
-      message: "Your account has been permanently deleted",
+      message: "Your account and associated data have been permanently deleted",
     });
   } catch (error) {
     console.error("Delete account error:", error);
